@@ -1,0 +1,3 @@
+- =docs=: documentation, logs, slides, paper
+- =data=: raw data, ignored
+- =src=: code

@@ -1,0 +1,18 @@
+- general
+  + find papers for refs
+  + write a pitch
+
+- look for training data
+  + online posts
+  + argumentation related
+  + large
+  + maybe with paper on them
+
+- decide vae architecture
+  + encoder (conv, recurrent, attention)
+  + decoder
+  + implementation
+
+- data preprocessing
+  + lowercase
+  + resplit sent
