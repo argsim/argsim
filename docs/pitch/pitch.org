@@ -90,7 +90,7 @@ todo
 :BEAMER_env: frame
 :BEAMER_OPT: fragile,allowframebreaks,label=
 :END:
-\printbibliography[]
+\printbibliography[heading=none]
 * Footnotes
 [fn:1] http://www.hlt.utdallas.edu/~vince/papers/emnlp14-reason.pdf
 [fn:2] https://arxiv.org/abs/1312.6114
