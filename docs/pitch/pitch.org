@@ -1,0 +1,109 @@
+#+OPTIONS: title:nil date:nil toc:nil author:nil email:nil
+#+STARTUP: beamer
+#+LaTeX_CLASS: beamer
+#+LATEX_HEADER: \setbeamertemplate{footline}[frame number]
+#+LATEX_HEADER: \usepackage{xcolor}
+#+LATEX_HEADER: \definecolor{darkblue}{rgb}{0,0,0.5}
+#+LATEX_HEADER: \hypersetup{colorlinks=true,allcolors=darkblue}
+#+LATEX_HEADER: \usepackage[sorting=ynt,style=authoryear,uniquename=false]{biblatex}
+#+LATEX_HEADER: \addbibresource{pitch.bib}
+* main idea                                                         :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- same approach as Luise Schricker 2018
+** learn a representation for arguments                             :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+- using a variational autoencoder
+- pick out useful dimensions with a l1-regularized logistic classifier
+** evaluate the representation                                      :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+- hierarchical agglomerative clustering
+- adjusted rand index and v-measure
+* data                                                              :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+** training                                                         :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+todo
+** evaluation                                                       :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+- reason and stance dataset \parencite{hasan2014you} [fn:1]
+* vae                                                               :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- variational autoencoder \parencite{kingma2013auto} [fn:2]
+\centering\includegraphics[width=\textwidth]{vae.pdf}
+- trainined by maximizing the variational lowerbound
+#+BEGIN_EXPORT latex
+\begin{align*}
+\mathcal{L} \left( \theta ; x \right)
+&= \mathbb{E}_{q_{\theta} \left( z | x \right)} [ \log p_{\theta} \left( x | z \right)]
+- \mathtt{KL} \left( q_{\theta} \left( z | x \right) \| p \left( z \right) \right)\\
+&\leq \log p\left(x\right)
+\end{align*}
+#+END_EXPORT
+* vae for sentences                                                 :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- \textcite{bowman2015generating} [fn:3][fn:4][fn:5]
+- challenges \parencite{vanichallenges} [fn:6]
+- comparisons \parencite{cifka2018eval} [fn:7]
+** main challenge                                                   :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+- the kl divergence term vanishes
+- the decoder becomes a language model
+- the encoder becomes useless
+* solutions                                                         :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- annealed kl divergence \parencite{bowman2015generating}
+- word dropout \parencite{bowman2015generating}
+- convolutional network \parencite{semeniuta2017hybrid, yang2017improved} [fn:8][fn:9]
+- bag-of-word loss \parencite{zhao2017learning} [fn:10]
+  (learning discourse-level diversity)
+* related research                                                  :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- topic model \parencite{srivastava2017autoencoding} [fn:11]
+  dirichlet vae \parencite{xiao2018dirichlet} [fn:12]
+- abstractive sentence summarization \parencite{schumann2018unsupervised} [fn:13]
+- target-level sentiment analysis \parencite{xu2018semi} [fn:14]
+- rnn with attention \parencite{jang2018recurrent} [fn:15]
+* references                                                        :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:BEAMER_OPT: fragile,allowframebreaks,label=
+:END:
+\printbibliography[]
+* Footnotes
+[fn:1] http://www.hlt.utdallas.edu/~vince/papers/emnlp14-reason.pdf
+[fn:2] https://arxiv.org/abs/1312.6114
+[fn:3] https://arxiv.org/abs/1511.06349
+[fn:4] https://github.com/timbmg/Sentence-VAE
+[fn:5] https://nicgian.github.io/text-generation-vae/
+[fn:6] http://nevitus.com/reports/inf-report.pdf
+[fn:7] https://arxiv.org/abs/1804.07972
+[fn:8] https://arxiv.org/abs/1702.02390
+[fn:9] https://arxiv.org/abs/1702.08139
+[fn:10] https://arxiv.org/abs/1703.10960
+[fn:11] https://arxiv.org/abs/1703.01488
+[fn:12] https://arxiv.org/abs/1811.00135
+[fn:13] https://arxiv.org/abs/1809.05233
+[fn:14] https://arxiv.org/abs/1810.10437
+[fn:15] https://arxiv.org/abs/1802.03238
