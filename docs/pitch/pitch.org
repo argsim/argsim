@@ -32,7 +32,10 @@
 :PROPERTIES:
 :BEAMER_env: block
 :END:
-todo
+- [[http://www.research.ibm.com/haifa/dept/vst/debating_data.shtml#Project][IBM project debater datasets]]
+  \(1.49\) million sentences
+- [[https://github.com/google-research-datasets/coarse-discourse][google research datasets (reddit)]]
+  \(9\,473\) threads comprised of \(116\,347\) comments
 ** evaluation                                                       :B_block:
 :PROPERTIES:
 :BEAMER_env: block
@@ -44,7 +47,7 @@ todo
 :END:
 - variational autoencoder \parencite{kingma2013auto} [fn:2]
 \centering\includegraphics[width=\textwidth]{vae.pdf}
-- trainined by maximizing the variational lowerbound
+- trained by maximizing the variational lowerbound
 #+BEGIN_EXPORT latex
 \begin{align*}
 \mathcal{L} \left( \theta ; x \right)
