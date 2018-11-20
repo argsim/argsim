@@ -1,18 +1,20 @@
-- general
-  + find papers for refs
-  + write a pitch
+=src/data.py= contains code for preprocessing, currently using the ibm claim dataset
+- create folder =data= and unzip the dataset there
+- create folder =trial= and =trial/data=, where the processed data would be
+- run the script
 
-- look for training data
-  + online posts
-  + argumentation related
-  + large
-  + maybe with paper on them
+=src/train.py= contains code for training, i implemented the data loading pipeline.
+try running the code, including the lines commented out, and you can figure out what's going on :D
 
-- decide vae architecture
-  + encoder (conv, recurrent, attention)
-  + decoder
-  + implementation
+=src/model.py= contains the model implementation, currently the skeleton, as we discussed.
+i made some changes, cuz i was confused when i made it.
+there was src and tgt, which made no sense.
+now there is just tgt.
 
-- data preprocessing
-  + lowercase
-  + resplit sent
+the sentences are padded with bos and eos by the sentence piece model.
+i added some code to compute the actual sequence length as part of the model,
+so that info doesn't need to be fed as an additional input.
+the actual length includes the bos, but not the eos,
+so it is exactly the length the model has to predict.
+
+change whatever you want, it's in your hands now :D

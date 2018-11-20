@@ -2,7 +2,7 @@ from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 from util_np import np, vpack
 
 
-def load_spm(path):
+def load_spm(path, options= "bos:eos"):
     """-> SentencePieceProcessor
 
     loads a sentence piece model.
@@ -10,10 +10,13 @@ def load_spm(path):
     """
     spm = SentencePieceProcessor()
     spm.load(path)
+    if options:
+        spm.set_encode_extra_options(options)
+        spm.set_decode_extra_options(options)
     return spm
 
 
-def spm(name, path, size, bos= -1, eos= -1, unk= 0, coverage= 0.9995):
+def spm(name, path, size= 8192, bos= 2, eos= 1, unk= 0, coverage= 0.9995):
     """-> SentencePieceProcessor
 
     trains a sentence piece model of `size` from text file on `path`
@@ -35,7 +38,6 @@ def spm(name, path, size, bos= -1, eos= -1, unk= 0, coverage= 0.9995):
             , size= size
             , path= path
             , name= name))
-    return load_spm(name + ".model")
 
 
 def encode(vocab, sents, length= None, dtype= np.int32, eos= '</s>'):
