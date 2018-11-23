@@ -1,7 +1,7 @@
 from util_tf import tf, placeholder
 
 
-def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
+def VAE(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
     # tgt : int32 (b, t)  | batchsize, timestep
     # dim_tgt : vocab size
     # dim_emb : model dimension
@@ -9,7 +9,6 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
 
     tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
     batch_size = tgt.get_shape().as_list()[0]
-    batch_size=2
 
     with tf.variable_scope('length'):
         length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
@@ -52,7 +51,7 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
 
     with tf.variable_scope('logit'):
         logits = tf.layers.dense(h, dim_tgt, name="logit")
-        labels = tf.boolean_mask(tgt[:, 1:], mask)  # (b * ?,), this should come from tgt[:,1:]
+        labels = tf.boolean_mask(tgt[:, 1:], mask)  # (b * ?,)
 
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)
