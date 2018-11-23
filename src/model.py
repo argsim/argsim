@@ -15,8 +15,6 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
 
     with tf.variable_scope('enc_embed'):
         # (b, t) -> (b, t, dim_emb)
-        # create a variable for embedding (dim_tgt, dim_emb)
-        # embed using tf.gather
         embed_mtrx = tf.get_variable(name= "embed_mtrx", shape = [dim_tgt, dim_emb])
         embed = tf.gather(embed_mtrx,tgt)
 
@@ -25,10 +23,12 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
         cell = tf.contrib.rnn.GRUCell(dim_emb)
         initial_state = cell.zero_state(batch_size, dtype=tf.float32)
         _, h = tf.nn.dynamic_rnn(cell, embed, sequence_length=length, initial_state=initial_state)
+        # note more rnn layer here
         h = h[0]
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
+        # note maybe add more dense layers with activation for mu and lv
         mu = tf.layers.dense(h, dim_rep, name= 'mu')
         lv = tf.layers.dense(h, dim_rep, name= 'lv')
         with tf.name_scope('z'):
@@ -38,12 +38,14 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
 
     with tf.variable_scope('dec_embed'):
         # (b, t) -> (b, t, dim_emb)
+        # note we can just use `embed_mtrx` here, since it's the same language, same space
         dec_embed_mtrx = tf.get_variable(name= "dec_embed_mtrx", shape = [dim_tgt, dim_emb])
         dec_embed = tf.gather(dec_embed_mtrx, tgt[:,:-1])
 
     with tf.variable_scope('decode'):
         cell_ = tf.nn.rnn_cell.GRUCell(dim_emb)
         h, _ = tf.nn.dynamic_rnn(cell_, dec_embed, initial_state=h, sequence_length=length)
+        # note more rnn layer here
 
     with tf.variable_scope('mask'):
         # (b, t, dim_tgt) -> (b * ?, dim_tgt)
@@ -51,8 +53,9 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
         h = tf.boolean_mask(h, mask)
 
     with tf.variable_scope('logit'):
+        # note more dense layers with activation here
         logits = tf.layers.dense(h,dim_tgt, name="logit")
-        labels = tf.boolean_mask(tgt[:,1:],mask) # (b * ?,), this should come from tgt[:,1:]
+        labels = tf.boolean_mask(tgt[:,1:],mask)
 
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)
