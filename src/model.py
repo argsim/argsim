@@ -2,20 +2,13 @@ from util_tf import tf, placeholder
 
 
 def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
-    # tgt : int32 (b, t)
+    # tgt : int32 (b, t)  | batchsize, timestep
     # dim_tgt : vocab size
     # dim_emb : model dimension
     # dim_rep : representation dimension
-    dim_tgt = 50
-    dim_emb = 40
-    dim_rep = 60
-    eos= 1
-    tgt=bat.eval()
-    batch_size=64
 
-    #batch_size = len(tgt)
     tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
-    #batch_size = tgt.get_shape().as_list()[0]
+    batch_size = tgt.get_shape().as_list()[0]
 
     with tf.variable_scope('length'):
         length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
@@ -29,10 +22,10 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
 
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
-        cell = tf.contrib.rnn.LSTMCell(dim_emb)
+        cell = tf.contrib.rnn.GRUCell(dim_emb)
         initial_state = cell.zero_state(batch_size, dtype=tf.float32)
         _, h = tf.nn.dynamic_rnn(cell, embed, sequence_length=length, initial_state=initial_state)
-        #h = tf.placeholder(tf.float32,[None,dim_emb])
+        h = h[0]
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
@@ -45,33 +38,28 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
 
     with tf.variable_scope('dec_embed'):
         # (b, t) -> (b, t, dim_emb)
-        # create a variable for embedding (dim_tgt, dim_emb)
-        # embed using tf.gather
         dec_embed_mtrx = tf.get_variable(name= "dec_embed_mtrx", shape = [dim_tgt, dim_emb])
-        dec_embed = tf.gather(dec_embed_mtrx, tgt)
+        dec_embed = tf.gather(dec_embed_mtrx, tgt[:,:-1])
 
     with tf.variable_scope('decode'):
-        # (b, dim_emb) -> (b, t, dim_emb)
-        cell = tf.nn.rnn_cell.LSTMCell(dim_emb)
-        helper = tf.contrib.seq2seq.TrainingHelper(dec_embed, length)
-        projection_layer = tf.layers.Dense(dim_tgt,use_bias=False)
-        decoder = tf.contrib.seq2seq.BasicDecoder(cell, helper, initial_state=h, output_layer=projection_layer)
-        outputs, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
-        logits = outputs.rnn_output
-        h = todo
-
-    with tf.variable_scope('logit'):
-        # (b, t, dim_emb) -> (b, t, dim_tgt)
-        y = todo
+        cell_ = tf.nn.rnn_cell.GRUCell(dim_emb)
+        h, _ = tf.nn.dynamic_rnn(cell_, dec_embed, initial_state=h, sequence_length=length)
 
     with tf.variable_scope('mask'):
         # (b, t, dim_tgt) -> (b * ?, dim_tgt)
-        # use tf.sequence_mask and tf.boolean_mask to extract positions within length
-        logits = todo # (b * ?, dim_tgt)
-        labels = todo # (b * ?,), this should come from tgt[:,1:]
+        mask = tf.sequence_mask(length)
+        h = tf.boolean_mask(h, mask)
 
-    with tf.variable_scope('prob'): prob = tf.nn.softmax(y)
-    with tf.variable_scope('pred'): pred = tf.argmax(y, -1, output_type= tf.int32)
+    with tf.variable_scope('logit'):
+        logits = tf.layers.dense(h,dim_tgt, name="logit")
+        labels = tf.boolean_mask(tgt[:,1:],mask) # (b * ?,), this should come from tgt[:,1:]
+
+    with tf.variable_scope('prob'):
+        prob = tf.nn.softmax(logits)
+
+    with tf.variable_scope('pred'):
+        pred = tf.argmax(logits, -1, output_type= tf.int32)
+
     with tf.variable_scope('acc'):
         acc = tf.reduce_mean(tf.to_float(tf.equal(labels, tf.argmax(logits, -1, output_type= tf.int32))))
 
@@ -86,4 +74,4 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup= 1e5, accelerate= 1e-5, eos= 1):
         with tf.name_scope('balance'):
             balance = tf.nn.sigmoid(accelerate * (tf.to_float(step) - warmup))
         loss = balance * loss_kld + loss_gen
-    up = tf.train.AdamOptimizer().minimize(loss, step)
+    train_step = tf.train.AdamOptimizer().minimize(loss, step)
