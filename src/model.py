@@ -1,7 +1,7 @@
 from util_tf import tf, placeholder
 
 
-def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
+def VAE(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
     # tgt : int32 (b, t)  | batchsize, timestep
     # dim_tgt : vocab size
     # dim_emb : model dimension
@@ -9,7 +9,6 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
 
     tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
     batch_size = tgt.get_shape().as_list()[0]
-    batch_size=2
 
     with tf.variable_scope('length'):
         length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
@@ -35,7 +34,7 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
         with tf.name_scope('z'):
             z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
         # (b, dim_rep) -> (b, dim_emb)
-        h = tf.layers.dense(z, dim_emb, name='proj')  # consider adding activation here
+        h = tf.layers.dense(z, dim_emb, name='proj')
 
     with tf.variable_scope('dec_embed'):
         # (b, t) -> (b, t, dim_emb)
@@ -44,6 +43,7 @@ def vae(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
         dec_embed = tf.gather(dec_embed_mtrx, tgt[:, :-1])
 
     with tf.variable_scope('decode'):
+        # note some dense layers with activation for h here
         cell_ = tf.nn.rnn_cell.GRUCell(dim_emb)
         h, _ = tf.nn.dynamic_rnn(cell_, dec_embed, initial_state=h, sequence_length=length)
         # note more rnn layer here
