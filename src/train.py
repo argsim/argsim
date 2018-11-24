@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 trial = "master"
+ckpt = 1
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -47,7 +48,10 @@ model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256)
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
-tf.global_variables_initializer().run()
+if ckpt:
+    saver.restore(sess, pform(path_ckpt, trial, ckpt))
+else:
+    tf.global_variables_initializer().run()
 
 # # for profiling
 # from util_tf import profile
