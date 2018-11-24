@@ -115,8 +115,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
             loss_gen = tf.reduce_mean(
                 tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
         with tf.name_scope('loss_kld'):
-            loss_kld = 0.5 * tf.reduce_mean(
-                tf.reduce_sum(tf.square(mu) + tf.exp(lv) - lv - 1.0, axis=1))
+            loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
         with tf.name_scope('balance'):
             balance = tf.nn.relu(tf.tanh(accelerate * tf.to_float(step) - warmup))
         loss = balance * loss_kld + loss_gen
