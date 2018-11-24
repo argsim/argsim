@@ -13,6 +13,8 @@ path_log = "../trial/log"
 seed = 0
 batch_train = 256
 batch_valid = 2048
+# batch_train = 64
+# batch_valid = 128
 
 from model import vAe as vae
 from tqdm import tqdm
@@ -46,7 +48,7 @@ tgt = pipe(batch, tf.int32, prefetch= 16)
 # build model #
 ###############
 
-model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256)
+model = vae(tgt, dim_emb=256, dim_rep=256)
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
@@ -58,7 +60,7 @@ else:
 # # for profiling
 # from util_tf import profile
 # with tf.summary.FileWriter(pform(path_log, trial), sess.graph) as wtr:
-#     profile(sess, wtr, model['loss'], feed_dict= {model['tgt']: valid[:batch_train]})
+#     profile(sess, wtr, model['loss'], feed_dict= {model['tgt']: valid[:32]})
 
 ############
 # training #
