@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 trial = "master"
-ckpt = 1
+ckpt = None
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -11,8 +11,8 @@ path_log = "../trial/log"
 # path_log = "/cache/tensorboard-logdir/argsim"
 
 seed = 0
-batch_train = 64
-batch_valid = 512
+batch_train = 256
+batch_valid = 2048
 
 from model import vAe as vae
 from tqdm import tqdm
@@ -36,15 +36,17 @@ def batch(size= batch_train, path= path_train, vocab= vocab, seed= seed, eos= 1)
         if size == len(bat):
             yield vpack(bat, (size, max(map(len, bat))), eos, np.int32)
             bat = []
-        bat.append(vocab.sample_encode_as_ids(raw[i], -1, 0.1))
+        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1)
+        if 1 < len(s) <= 256:
+            bat.append(s)
 
-tgt = pipe(batch, tf.int32, prefetch= 4)
+tgt = pipe(batch, tf.int32, prefetch= 16)
 
 ###############
 # build model #
 ###############
 
-model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256)
+model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256, warmup=2e4, accelerate=1e-4)
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
@@ -77,10 +79,11 @@ def summ(step):
         for i, j in partition(len(valid), batch_valid, discard= False))))
     wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
 
-for epoch in range(9):
-    for _ in range(150):
-        for _ in tqdm(range(150), ncols= 70):
+# with the current dataset and batch size, about 5k steps per epoch
+for epoch in range(2): # train for 2 epochs at a time
+    for _ in range(50):
+        for _ in tqdm(range(100), ncols= 70):
             sess.run(model['train_step'])
         step = sess.run(model['step'])
         summ(step)
-    saver.save(sess, pform(path_ckpt, trial, step // 22500), write_meta_graph= False)
+    saver.save(sess, pform(path_ckpt, trial, step // 5000), write_meta_graph= False)
