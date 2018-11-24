@@ -30,16 +30,30 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=2, dropout=0.2, warmup=5e4, a
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
         x = tf.layers.dropout(embed, dropout)
-        stacked_cells = tf.nn.rnn_cell.MultiRNNCell(
-            [tf.nn.rnn_cell.DropoutWrapper(
+        stacked_cells_fw = [
+            tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
                 output_keep_prob=1.0 - dropout,
                 variational_recurrent=True,
                 dtype=tf.float32)
-             for _ in range(rnn_layers)])
-        initial_state = stacked_cells.zero_state(batch_size, dtype=tf.float32)
-        _, h = tf.nn.dynamic_rnn(stacked_cells, x, sequence_length=length, initial_state=initial_state, swap_memory=True)
-        h = h[0]
+            for _ in range(rnn_layers)]
+        stacked_cells_bw = [
+            tf.nn.rnn_cell.DropoutWrapper(
+                tf.nn.rnn_cell.GRUCell(dim_emb),
+                output_keep_prob=1.0 - dropout,
+                variational_recurrent=True,
+                dtype=tf.float32)
+            for _ in range(rnn_layers)]
+        initial_state_fw = [cell.zero_state(batch_size, dtype=tf.float32) for cell in stacked_cells_fw]
+        initial_state_bw = [cell.zero_state(batch_size, dtype=tf.float32) for cell in stacked_cells_bw]
+        _, h_fw, h_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
+            cells_fw=stacked_cells_fw,
+            cells_bw=stacked_cells_bw,
+            inputs=x,
+            initial_states_fw=initial_state_fw,
+            initial_states_bw=initial_state_bw,
+            sequence_length=length)
+        h = tf.concat((h_fw[-1], h_bw[-1]), -1)
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
@@ -49,28 +63,28 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=2, dropout=0.2, warmup=5e4, a
             h = z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
 
     with tf.variable_scope('decode'):
-        # (b, dim_rep) -> (b, dim_emb)
+        # (b, dim_rep) -> (b, t, dim_emb)
         x = tf.layers.dropout(embed, dropout) # todo switch to word dropout
         h = mlp(h, dim_emb)
-        stacked_cells_ = tf.nn.rnn_cell.MultiRNNCell(
+        stacked_cells = tf.nn.rnn_cell.MultiRNNCell(
             [tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
                 output_keep_prob=1.0 - dropout,
                 variational_recurrent=True,
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
-        initial_state_ = tuple(h for _ in range(rnn_layers))
-        h, _ = tf.nn.dynamic_rnn(stacked_cells_, x, initial_state=initial_state_, sequence_length=length, swap_memory=True)
+        initial_state = tuple(h for _ in range(rnn_layers))
+        h, _ = tf.nn.dynamic_rnn(stacked_cells, x, initial_state=initial_state, sequence_length=length)
 
     with tf.variable_scope('mask'):
-        # (b, t, dim_tgt) -> (b * ?, dim_tgt)
         mask = tf.sequence_mask(length)
 
     with tf.variable_scope('logit'):
+        # (b, t, dim_emb) -> (?, dim_tgt)
         h = tf.boolean_mask(h, mask)
         h = mlp(h, dim_emb)
         h = tf.layers.dropout(h, dropout)
-        logits = tf.layers.dense(h, dim_tgt, name="logit")
+        logits = tf.layers.dense(h, dim_tgt)
         labels = tf.boolean_mask(tgt[:, 1:], mask)
 
     with tf.variable_scope('prob'):
@@ -80,7 +94,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=2, dropout=0.2, warmup=5e4, a
         pred = tf.argmax(logits, -1, output_type=tf.int32)
 
     with tf.variable_scope('acc'):
-        acc = tf.reduce_mean(tf.to_float(tf.equal(labels, tf.argmax(logits, -1, output_type=tf.int32))))
+        acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
 
     step = tf.train.get_or_create_global_step()
     with tf.variable_scope('loss'):

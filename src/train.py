@@ -78,4 +78,4 @@ for epoch in range(9):
             sess.run(model['train_step'])
         step = sess.run(model['step'])
         summ(step)
-    saver.save(sess, pform(path_ckpt, trial, epoch), write_meta_graph= False)
+    saver.save(sess, pform(path_ckpt, trial, step // 22500), write_meta_graph= False)
