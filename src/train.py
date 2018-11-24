@@ -7,6 +7,7 @@ path_train = "../trial/data/train.txt"
 path_valid = "../trial/data/valid.npy"
 path_ckpt = "../trial/ckpt"
 path_log = "../trial/log"
+# path_log = "/cache/tensorboard-logdir/argsim"
 
 seed = 0
 batch_train = 64

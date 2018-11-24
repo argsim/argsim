@@ -3,7 +3,7 @@ from util_tf import tf, placeholder
 
 def mlp(x, dim, act=tf.nn.relu, name='mlp'):
     with tf.variable_scope(name):
-        x = tf.layers.dense(x, dim*4, activation="relu")
+        x = tf.layers.dense(x, dim*4, activation=act)
         x = tf.layers.dense(x, dim)
     return x
 
