@@ -1,7 +1,7 @@
 from util_tf import tf, placeholder
 
 
-def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, accelerate=5e-4, eos=1):
+def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, accelerate=1e-4, eos=1):
     # tgt : int32 (b, t)  | batchsize, timestep
     # dim_tgt : vocab size
     # dim_emb : model dimension
@@ -118,7 +118,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
             loss_kld = 0.5 * tf.reduce_mean(
                 tf.reduce_sum(tf.square(mu) + tf.exp(lv) - lv - 1.0, axis=1))
         with tf.name_scope('balance'):
-            balance = tf.nn.sigmoid(accelerate * (tf.to_float(step) - warmup))
+            balance = tf.nn.relu(tf.tanh(accelerate * tf.to_float(step) - warmup))
         loss = balance * loss_kld + loss_gen
     train_step = tf.train.AdamOptimizer().minimize(loss, step)
 
