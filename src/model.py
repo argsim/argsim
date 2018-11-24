@@ -1,19 +1,22 @@
 from util_tf import tf, placeholder
 
 
-def vAe(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
+def mlp(x, dim, act=tf.nn.relu, name='mlp'):
+    with tf.variable_scope(name):
+        x = tf.layers.dense(x, dim*4, activation="relu")
+        x = tf.layers.dense(x, dim)
+    return x
+
+
+def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=2, dropout=0.2, warmup=5e4, accelerate=5e-5, eos=1):
     # tgt : int32 (b, t)  | batchsize, timestep
     # dim_tgt : vocab size
     # dim_emb : model dimension
     # dim_rep : representation dimension
 
-    ##########################################################
-    dropout = 0.3  # dropout
-    rnn_layers = 2 # number of layers for encoder/decoder RNN
-    ##########################################################
-
     tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
     batch_size = tf.shape(tgt)[0]
+    dropout = placeholder(tf.float32, (), dropout, 'dropout')
 
     with tf.variable_scope('length'):
         length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
@@ -26,6 +29,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
 
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
+        x = tf.layers.dropout(embed, dropout)
         stacked_cells = tf.nn.rnn_cell.MultiRNNCell(
             [tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
@@ -34,24 +38,20 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
         initial_state = stacked_cells.zero_state(batch_size, dtype=tf.float32)
-        _, h = tf.nn.dynamic_rnn(stacked_cells, embed, sequence_length=length, initial_state=initial_state)
+        _, h = tf.nn.dynamic_rnn(stacked_cells, x, sequence_length=length, initial_state=initial_state, swap_memory=True)
         h = h[0]
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
-        mu = tf.layers.dense(h, dim_rep*4, activation="relu")
-        mu = tf.layers.dense(mu, dim_rep, name='mu')
-        lv = tf.layers.dense(h, dim_rep*4, activation="relu")
-        lv = tf.layers.dense(lv, dim_rep, name='lv')
+        mu = mlp(h, dim_rep, name='mu')
+        lv = mlp(h, dim_rep, name='lv')
         with tf.name_scope('z'):
-            z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        # (b, dim_rep) -> (b, dim_emb)
-        h = tf.layers.dense(z, dim_emb, name='proj')
+            h = z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
 
     with tf.variable_scope('decode'):
-        h = tf.layers.dense(h, dim_emb*4, activation="relu")
-        h = tf.layers.dropout(h, dropout)
-        h = tf.layers.dense(h, dim_emb)
+        # (b, dim_rep) -> (b, dim_emb)
+        x = tf.layers.dropout(embed, dropout) # todo switch to word dropout
+        h = mlp(h, dim_emb)
         stacked_cells_ = tf.nn.rnn_cell.MultiRNNCell(
             [tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
@@ -60,20 +60,19 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, warmup=1e5, accelerate=1e-5, eos=1):
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
         initial_state_ = tuple(h for _ in range(rnn_layers))
-        h, _ = tf.nn.dynamic_rnn(stacked_cells_, embed, initial_state=initial_state_, sequence_length=length)
+        h, _ = tf.nn.dynamic_rnn(stacked_cells_, x, initial_state=initial_state_, sequence_length=length, swap_memory=True)
 
     with tf.variable_scope('mask'):
         # (b, t, dim_tgt) -> (b * ?, dim_tgt)
         mask = tf.sequence_mask(length)
-        h = tf.boolean_mask(h, mask)
 
     with tf.variable_scope('logit'):
-        h = tf.layers.dense(h, dim_emb)
-        h = tf.layers.dense(h, dim_emb*4, activation="relu")
+        h = tf.boolean_mask(h, mask)
+        h = mlp(h, dim_emb)
         h = tf.layers.dropout(h, dropout)
         logits = tf.layers.dense(h, dim_tgt, name="logit")
         labels = tf.boolean_mask(tgt[:, 1:], mask)
-X
+
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)
 
@@ -95,3 +94,13 @@ X
             balance = tf.nn.sigmoid(accelerate * (tf.to_float(step) - warmup))
         loss = balance * loss_kld + loss_gen
     train_step = tf.train.AdamOptimizer().minimize(loss, step)
+
+    return dict(
+        tgt=tgt, dropout=dropout, balance=balance,
+        mu=mu, lv=lv,
+        logits=logits, prob=prob, pred=pred, acc=acc,
+        step=step,
+        loss=loss,
+        loss_gen=loss_gen,
+        loss_kld=loss_kld,
+        train_step=train_step)
