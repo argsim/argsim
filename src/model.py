@@ -13,6 +13,9 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
         dropout = placeholder(tf.float32, (), dropout, 'dropout')
         keep_prob = 1.0 - dropout
 
+    # disable dropout for now
+    keep_prob = 1.0
+
     with tf.variable_scope('info'):
         with tf.variable_scope('shape'):
             shape = tf.shape(tgt)
@@ -22,7 +25,6 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
             length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
         with tf.variable_scope('mask'):
             mask = tf.sequence_mask(length, max_length)
-            labels = tf.boolean_mask(tgt[:,1:], mask)
 
     with tf.variable_scope('embed'):
         # (b, t) -> (b, t, dim_emb)
@@ -65,12 +67,12 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='in')
+        # h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='in')
         mu = tf.layers.dense(h, dim_rep, name='mu')
         lv = tf.layers.dense(h, dim_rep, name='lv')
         with tf.name_scope('z'):
-            z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = tf.layers.dense(z, dim_emb, activation=tf.tanh, name='ex')
+            h = z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
+        # h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='ex')
 
     with tf.variable_scope('decode'):
         # (b, dim_rep) -> (b, t, dim_emb)
@@ -91,8 +93,8 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
     with tf.variable_scope('logit'):
         # (b, t, dim_emb) -> (?, dim_tgt)
         h = tf.boolean_mask(h, mask)
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
-        h = tf.nn.dropout(h, keep_prob) # maybe remove this
+        # h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
+        # h = tf.nn.dropout(h, keep_prob) # maybe remove this
         logits = tf.layers.dense(h, dim_tgt) # consider embedding sharing
 
     with tf.variable_scope('prob'):
@@ -100,6 +102,9 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('pred'):
         pred = tf.argmax(logits, -1, output_type=tf.int32)
+
+    with tf.variable_scope('gold'):
+        labels = tf.boolean_mask(tgt[:,1:], mask)
 
     with tf.variable_scope('acc'):
         acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
