@@ -63,12 +63,12 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep)
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
+        h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='in')
         mu = tf.layers.dense(h, dim_rep, name='mu')
         lv = tf.layers.dense(h, dim_rep, name='lv')
         with tf.name_scope('z'):
             z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = tf.layers.dense(z, dim_emb, activation=tf.tanh)
+        h = tf.layers.dense(z, dim_emb, activation=tf.tanh, name='ex')
 
     with tf.variable_scope('decode'):
         # (b, dim_rep) -> (b, t, dim_emb)
@@ -89,8 +89,8 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
         # (b, t, dim_emb) -> (?, dim_tgt)
         h = tf.boolean_mask(h, mask)
         h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
-        h = tf.nn.dropout(h, keep_prob)
-        logits = tf.layers.dense(h, dim_tgt)
+        h = tf.nn.dropout(h, keep_prob) # maybe remove this
+        logits = tf.layers.dense(h, dim_tgt) # consider embedding sharing
 
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)
