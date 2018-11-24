@@ -15,22 +15,24 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     # disable dropout for now
     keep_prob = 1.0
+    # hard code word dropout for now
+    dropout_word = 0.5
 
-    with tf.variable_scope('info'):
-        with tf.variable_scope('shape'):
-            shape = tf.shape(tgt)
-            batch_size = shape[0]
-            max_length = shape[1] - 1
-        with tf.variable_scope('length'):
-            length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
-        with tf.variable_scope('mask'):
-            mask = tf.sequence_mask(length, max_length)
+    with tf.variable_scope('length'):
+        length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
+
+    with tf.variable_scope('mask'):
+        mask = tf.sequence_mask(length, maxlen=tf.shape(tgt)[1]-1)
+
+    with tf.variable_scope('gold'):
+        labels = tf.boolean_mask(tgt[:,1:], mask)
 
     with tf.variable_scope('embed'):
         # (b, t) -> (b, t, dim_emb)
         # same embedding for encoder and decoder
         embed_mtrx = tf.get_variable(name="embed_mtrx", shape=[dim_tgt, dim_emb])
-        embed = tf.gather(embed_mtrx, tgt)
+        embed_enc = tf.gather(embed_mtrx, tgt[:,1:])
+        embed_dec = tf.gather(embed_mtrx, tgt * tf.to_int32(dropout_word < tf.random_uniform(tf.shape(tgt))))
 
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
@@ -54,12 +56,13 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
                 input_size=dim_emb,
                 dtype=tf.float32)
             for _ in range(rnn_layers)]
+        batch_size = tf.shape(embed_enc)[0]
         initial_state_fw = [cell.zero_state(batch_size, dtype=tf.float32) for cell in stacked_cells_fw]
         initial_state_bw = [cell.zero_state(batch_size, dtype=tf.float32) for cell in stacked_cells_bw]
         _, h_fw, h_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
             cells_fw=stacked_cells_fw,
             cells_bw=stacked_cells_bw,
-            inputs=embed[:,1:],
+            inputs=embed_enc,
             initial_states_fw=initial_state_fw,
             initial_states_bw=initial_state_bw,
             sequence_length=length)
@@ -76,7 +79,6 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('decode'):
         # (b, dim_rep) -> (b, t, dim_emb)
-        # todo word dropout
         stacked_cells = tf.nn.rnn_cell.MultiRNNCell(
             [tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
@@ -88,23 +90,21 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
         initial_state = tuple(h for _ in range(rnn_layers))
-        h, _ = tf.nn.dynamic_rnn(stacked_cells, embed, initial_state=initial_state, sequence_length=length)
+        h, _ = tf.nn.dynamic_rnn(stacked_cells, embed_dec, initial_state=initial_state, sequence_length=length)
 
     with tf.variable_scope('logit'):
         # (b, t, dim_emb) -> (?, dim_tgt)
         h = tf.boolean_mask(h, mask)
         # h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
         # h = tf.nn.dropout(h, keep_prob) # maybe remove this
-        logits = tf.layers.dense(h, dim_tgt) # consider embedding sharing
+        # logits = tf.layers.dense(h, dim_tgt)
+        logits = tf.matmul(h, embed_mtrx, transpose_b=True) # embedding sharing
 
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)
 
     with tf.variable_scope('pred'):
         pred = tf.argmax(logits, -1, output_type=tf.int32)
-
-    with tf.variable_scope('gold'):
-        labels = tf.boolean_mask(tgt[:,1:], mask)
 
     with tf.variable_scope('acc'):
         acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
