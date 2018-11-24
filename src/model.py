@@ -39,6 +39,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
                 output_keep_prob=keep_prob,
                 state_keep_prob=keep_prob,
                 variational_recurrent=True,
+                input_size=dim_emb,
                 dtype=tf.float32)
             for _ in range(rnn_layers)]
         stacked_cells_bw = [
@@ -48,6 +49,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
                 output_keep_prob=keep_prob,
                 state_keep_prob=keep_prob,
                 variational_recurrent=True,
+                input_size=dim_emb,
                 dtype=tf.float32)
             for _ in range(rnn_layers)]
         initial_state_fw = [cell.zero_state(batch_size, dtype=tf.float32) for cell in stacked_cells_fw]
@@ -80,6 +82,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
                 output_keep_prob=keep_prob,
                 state_keep_prob=keep_prob,
                 variational_recurrent=True,
+                input_size=dim_emb,
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
         initial_state = tuple(h for _ in range(rnn_layers))
