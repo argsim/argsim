@@ -32,18 +32,21 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
-        x = tf.nn.dropout(embed, keep_prob)[:,1:]
         stacked_cells_fw = [
             tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
+                input_keep_prob=keep_prob,
                 output_keep_prob=keep_prob,
+                state_keep_prob=keep_prob,
                 variational_recurrent=True,
                 dtype=tf.float32)
             for _ in range(rnn_layers)]
         stacked_cells_bw = [
             tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
+                input_keep_prob=keep_prob,
                 output_keep_prob=keep_prob,
+                state_keep_prob=keep_prob,
                 variational_recurrent=True,
                 dtype=tf.float32)
             for _ in range(rnn_layers)]
@@ -52,7 +55,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
         _, h_fw, h_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
             cells_fw=stacked_cells_fw,
             cells_bw=stacked_cells_bw,
-            inputs=x,
+            inputs=embed[:,1:],
             initial_states_fw=initial_state_fw,
             initial_states_bw=initial_state_bw,
             sequence_length=length)
@@ -69,16 +72,18 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
 
     with tf.variable_scope('decode'):
         # (b, dim_rep) -> (b, t, dim_emb)
-        x = tf.nn.dropout(embed, keep_prob) # todo switch to word dropout
+        # todo word dropout
         stacked_cells = tf.nn.rnn_cell.MultiRNNCell(
             [tf.nn.rnn_cell.DropoutWrapper(
                 tf.nn.rnn_cell.GRUCell(dim_emb),
+                input_keep_prob=keep_prob,
                 output_keep_prob=keep_prob,
+                state_keep_prob=keep_prob,
                 variational_recurrent=True,
                 dtype=tf.float32)
              for _ in range(rnn_layers)])
         initial_state = tuple(h for _ in range(rnn_layers))
-        h, _ = tf.nn.dynamic_rnn(stacked_cells, x, initial_state=initial_state, sequence_length=length)
+        h, _ = tf.nn.dynamic_rnn(stacked_cells, embed, initial_state=initial_state, sequence_length=length)
 
     with tf.variable_scope('logit'):
         # (b, t, dim_emb) -> (?, dim_tgt)
