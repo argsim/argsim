@@ -17,7 +17,7 @@ def vAe(tgt, dim_tgt, dim_emb, dim_rep, rnn_layers=1, dropout=0.2, warmup=5e3, a
         with tf.variable_scope('shape'):
             shape = tf.shape(tgt)
             batch_size = shape[0]
-            max_length = shape[1]
+            max_length = shape[1] - 1
         with tf.variable_scope('length'):
             length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
         with tf.variable_scope('mask'):

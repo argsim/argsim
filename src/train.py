@@ -46,7 +46,7 @@ tgt = pipe(batch, tf.int32, prefetch= 16)
 # build model #
 ###############
 
-model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256, warmup=2e4, accelerate=1e-4)
+model = vae(tgt, dim_tgt=8192, dim_emb=256, dim_rep=256)
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
