@@ -1,3 +1,67 @@
-- =docs=: documentation, logs, slides, paper
-- =data=: raw data, ignored
-- =src=: code
+* argsim
+
+argument similarity learning with variational autoencoder
+
+** quick start
+
+*** dependencies
+
+- [[https://www.python.org/][python3]]
+- [[https://www.tensorflow.org/][tensorflow]]
+- [[https://github.com/google/sentencepiece][sentencepiece]]
+
+*** datasets
+
+todo
+
+#+BEGIN_SRC bash :eval no
+mkdir data
+#+END_SRC
+
+*** to reproduce our results
+
+#+BEGIN_SRC bash :eval no
+mkdir trial trial/data trial/ckpt
+cd src
+#+END_SRC
+
+- prepare the data
+
+#+BEGIN_SRC bash :eval no
+./data.py
+#+END_SRC
+
+- train a new model
+
+#+BEGIN_SRC bash :eval no
+./traing.py
+#+END_SRC
+
+- clustering and evaluation
+
+todo
+
+*** default paths, git ignored
+
+- =data=: for storing raw data
+- =trial/data= for storing processed data
+- =trial/ckpt= for model checkpoints
+- =trial/log= for tensorboard summaries
+
+** content
+
+- [[docs][docs]]: documentation, logs, slides, paper
+- [[src][src]]: code
+  + [[src/data.py][data.py]]: for preprocessing
+  + [[src/train.py][train.py]]: for training
+  + [[src/model.py][model.py]]: the model
+  + =util*.py=: various utilities
+
+** trivialities
+
+*** sentencepiece
+
+| =vocab_size= | 8192 |
+| =unk_id=     |    0 |
+| =eos_id=     |    1 |
+| =bos_id=     |    2 |

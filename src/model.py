@@ -119,10 +119,3 @@ def vAe(tgt,
         loss_kld=loss_kld,
         balance=balance,
         train_step=train_step)
-
-
-# todo
-# use dropout
-# use higher word dropout
-# try larger model
-# relu activation with he init
