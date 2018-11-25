@@ -1,8 +1,5 @@
-* relu activation
-
-- change all activations to relu
-- use more dense layers
-- use he init
+- try init with scale 1.0
+- try logit embed sharing
 
 * dropout
 
@@ -25,3 +22,10 @@ figure out why and if dropout is beneficial
 since we don't need to use the decoder for generation,
 it does not have to be generative/autoregressive.
 consider a transposed convolutional network.
+
+* performance optimization
+
+use time major format
+
+consider using =tf.contrib.cudnn_rnn.CudnnGRU=
+but it's a bit tricky to make it automagically compatible with the cpu version
