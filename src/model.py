@@ -10,7 +10,7 @@ def vAe(tgt,
         # training spec
         keep_word=0.5,
         keep_prob=0.9,
-        warmup=5e3,
+        warmup=1e4,
         accelerate=1e-4,
         eos=1):
     # tgt : int32 (b, t)  | batchsize, timestep
@@ -105,7 +105,7 @@ def vAe(tgt,
         with tf.name_scope('loss_kld'):
             loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
         with tf.name_scope('balance'):
-            balance = tf.nn.relu(tf.tanh(accelerate * tf.to_float(step) - warmup))
+            balance = tf.nn.relu(tf.tanh(accelerate * (tf.to_float(step) - warmup)))
         loss = balance * loss_kld + loss_gen
     train_step = tf.train.AdamOptimizer().minimize(loss, step)
 
