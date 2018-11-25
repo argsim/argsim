@@ -4,7 +4,7 @@ import sys
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "relu"
+trial = "master"
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -15,7 +15,7 @@ path_log = "../trial/log"
 
 seed = 0
 batch_train = 256
-batch_valid = 2048
+batch_valid = 1024
 # batch_train = 64
 # batch_valid = 128
 
