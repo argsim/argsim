@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 
+import sys
+if 1 == sys.argv: ckpt = None
+if 2 == sys.argv: ckpt = sys.argv[1]
+if 3 <= sys.argv: sys.exit("wrong args")
 trial = "master"
-ckpt = None
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
