@@ -1,4 +1,14 @@
+from util import identity, partial
 from util_tf import tf, placeholder
+
+
+# init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
+init_kern = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
+init_bias = tf.zeros_initializer()
+
+layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
+layer_act = partial(layer_aff, activation=tf.nn.relu)
+rnn_cell = partial(tf.nn.rnn_cell.GRUCell, activation=tf.nn.relu, kernel_initializer=init_kern, bias_initializer=init_bias)
 
 
 def vAe(tgt,
@@ -7,6 +17,7 @@ def vAe(tgt,
         dim_emb=256,
         dim_rep=256,
         rnn_layers=2,
+        logit_use_embed=False,
         # training spec
         keep_word=0.5,
         keep_prob=0.9,
@@ -22,17 +33,19 @@ def vAe(tgt,
     keep_word = placeholder(tf.float32, (), keep_word, 'keep_word')
     keep_prob = placeholder(tf.float32, (), keep_prob, 'keep_prob')
 
-    # disable dropout for now
-    keep_prob = 1.0
-
-    rnn_cell = lambda input_size=dim_emb: tf.nn.rnn_cell.DropoutWrapper(
-        tf.nn.rnn_cell.GRUCell(dim_emb),
+    dropout = partial(tf.nn.dropout, keep_prob=keep_prob)
+    rnn_dropout = lambda cell, input_size=dim_emb: tf.nn.rnn_cell.DropoutWrapper(
+        cell=cell,
         input_keep_prob=keep_prob,
         output_keep_prob=keep_prob,
         state_keep_prob=keep_prob,
         variational_recurrent=True,
         input_size=input_size,
         dtype=tf.float32)
+
+    # disable dropout for now
+    dropout = identity
+    rnn_dropout = lambda cell, input_size=dim_emb: cell
 
     with tf.variable_scope('input'):
         with tf.variable_scope('length'):
@@ -49,15 +62,15 @@ def vAe(tgt,
 
     with tf.variable_scope('embed'):
         # (b, t) -> (b, t, dim_emb)
-        embed_mtrx = tf.get_variable(name="embed_mtrx", shape=[dim_tgt, dim_emb])
+        embed_mtrx = tf.get_variable(name="embed_mtrx", shape=[dim_tgt, dim_emb], initializer=init_kern)
         embed_enc = tf.gather(embed_mtrx, tgt_enc)
         embed_dec = tf.gather(embed_mtrx, tgt_dec * tf.to_int32(tf.random_uniform(tf.shape(tgt_dec)) < keep_word))
 
     with tf.variable_scope('encode'):
         # (b, t, dim_emb) -> (b, dim_emb)
         _, h_fw, h_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            cells_fw=[rnn_cell(dim_emb*(1+i)) for i in range(rnn_layers)],
-            cells_bw=[rnn_cell(dim_emb*(1+i)) for i in range(rnn_layers)],
+            cells_fw=[rnn_dropout(rnn_cell(dim_emb), dim_emb*(1+i)) for i in range(rnn_layers)],
+            cells_bw=[rnn_dropout(rnn_cell(dim_emb), dim_emb*(1+i)) for i in range(rnn_layers)],
             inputs=embed_enc,
             sequence_length=length,
             dtype=tf.float32)
@@ -65,28 +78,31 @@ def vAe(tgt,
 
     with tf.variable_scope('latent'):
         # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='in')
-        mu = tf.layers.dense(h, dim_rep, name='mu')
-        lv = tf.layers.dense(h, dim_rep, name='lv')
+        h = layer_act(h, dim_emb, name='in1')
+        h = layer_act(h, dim_emb, name='in2')
+        mu = layer_aff(h, dim_rep, name='mu')
+        lv = layer_aff(h, dim_rep, name='lv')
         with tf.name_scope('z'):
             h = z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh, name='ex')
+        h = layer_act(h, dim_emb, name='ex1')
+        h = layer_act(h, dim_emb, name='ex2')
 
     with tf.variable_scope('decode'):
         # (b, dim_emb) -> (b, t, dim_emb) -> (?, dim_emb)
-        h, _ = tf.nn.dynamic_rnn(rnn_cell(), embed_dec, initial_state=h, sequence_length=length)
+        h, _ = tf.nn.dynamic_rnn(rnn_dropout(rnn_cell(dim_emb)), embed_dec, initial_state=h, sequence_length=length)
         # # keep decoder simple for now
-        # stacked_cells = tf.nn.rnn_cell.MultiRNNCell([rnn_cell() for _ in range(rnn_layers)])
+        # stacked_cells = tf.nn.rnn_cell.MultiRNNCell([rnn_dropout(rnn_cell(dim_emb)) for _ in range(rnn_layers)])
         # initial_state = tuple(h for _ in range(rnn_layers))
         # h, _ = tf.nn.dynamic_rnn(stacked_cells, embed_dec, initial_state=initial_state, sequence_length=length)
         h = tf.boolean_mask(h, mask)
-        h = tf.layers.dense(h, dim_emb, activation=tf.tanh)
-        h = tf.nn.dropout(h, keep_prob)
+        h = dropout(layer_act(h, dim_emb, name='out1'))
+        h = dropout(layer_act(h, dim_emb, name='out2'))
 
-    with tf.variable_scope('logit'):
-        # (?, dim_emb) -> (?, dim_tgt)
-        logits = tf.layers.dense(h, dim_tgt)
-        # logits = tf.matmul(h, embed_mtrx, transpose_b=True) # embedding sharing
+    # (?, dim_emb) -> (?, dim_tgt)
+    if logit_use_embed:
+        logits = tf.matmul(h, embed_mtrx, transpose_b=True, name='logit')
+    else:
+        logits = layer_aff(h, dim_tgt, name='logit')
 
     with tf.variable_scope('prob'):
         prob = tf.nn.softmax(logits)

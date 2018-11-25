@@ -4,7 +4,7 @@ import sys
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "master"
+trial = "relu"
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -51,7 +51,7 @@ tgt = pipe(batch, tf.int32, prefetch= 16)
 # build model #
 ###############
 
-model = vae(tgt, dim_emb=256, dim_rep=256, warmup=2e4)
+model = vae(tgt, dim_emb=256, dim_rep=256)
 
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
