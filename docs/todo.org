@@ -1,15 +1,18 @@
 - try init with scale 1.0
 - try logit embed sharing
+- tune model size
+- try separate relu layers for mu and lv
+
+* word dropout
+
+- never drop bos
+- increase drop rate
+- do not drop for eval
 
 * dropout
 
 the vae currently does not learn when dropout is applied.
 figure out why and if dropout is beneficial
-
-* hyperparameter tuning
-
-- word dropout rate
-- model size
 
 * attentional encoder
 
