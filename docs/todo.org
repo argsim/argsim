@@ -6,21 +6,11 @@
 
 * tuning
 
-- tune model size
+- model size
+- dropout rate
 - try init with scale 1.0
 - try logit embed sharing
 - try separate relu layers for mu and lv
-
-* word dropout
-
-- never drop bos
-- increase drop rate
-- do not drop for eval
-
-* dropout
-
-the vae currently does not learn when dropout is applied.
-figure out why and if dropout is beneficial
 
 * attentional encoder
 
@@ -33,10 +23,3 @@ figure out why and if dropout is beneficial
 since we don't need to use the decoder for generation,
 it does not have to be generative/autoregressive.
 consider a transposed convolutional network.
-
-* performance optimization
-
-use time major format
-
-consider using =tf.contrib.cudnn_rnn.CudnnGRU=
-but it's a bit tricky to make it automagically compatible with the cpu version
