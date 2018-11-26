@@ -11,7 +11,7 @@ path_train = "../trial/data/train.txt"
 path_valid = "../trial/data/valid.npy"
 path_ckpt = "../trial/ckpt"
 path_log = "../trial/log" # on colab
-# path_log = "/cache/tensorboard-logdir/argsim" # on jarvis
+path_log = "/cache/tensorboard-logdir/argsim" # on jarvis
 
 seed = 0
 batch_train = 256
@@ -87,10 +87,11 @@ def summ(step, model=model_valid):
     wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
 
 # with the current dataset and batch size, about 5k steps per epoch
-for epoch in range(2): # train for 2 epochs at a time
-    for _ in range(50):
+# train for 2 epochs at a time
+for _ in range(5):
+    for _ in range(100):
         for _ in tqdm(range(100), ncols= 70):
             sess.run(model_train.train_step)
         step = sess.run(model_train.step)
         summ(step)
-    saver.save(sess, pform(path_ckpt, trial, step // 5000), write_meta_graph= False)
+    saver.save(sess, pform(path_ckpt, trial, step // 10000), write_meta_graph= False)
