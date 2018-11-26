@@ -94,9 +94,10 @@ def vAe(mode,
     with scope('latent'):
         # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         # no dropout here since we do not want distributed representation
-        with scope('in1'): h = layer_act(h, dim_emb)
-        with scope('in2'): h = layer_act(h, dim_emb)
+        with scope('in'): h = layer_act(h, dim_emb)
+        with scope('in_mu'): h = layer_act(h, dim_emb)
         with scope('mu'): mu = self.mu = layer_aff(h, dim_rep)
+        with scope('in_lv'): h = layer_act(h, dim_emb)
         with scope('lv'): lv = self.lv = layer_aff(h, dim_rep)
         with scope('z'): h = self.z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
         with scope('ex1'): h = layer_act(h, dim_emb)
