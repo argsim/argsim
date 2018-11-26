@@ -1,12 +1,11 @@
 import os
-import numpy as np
 
 ############################################
 ### Processes and saves the Test Dataset ###
 ############################################
 
 datadir = '../data/reason/reason'
-labels, arguments,idx2lbl,lbl2idx = [], [], {}, {}
+labels, arguments = [], []
 
 for dirs, subdirs, files in os.walk(datadir):
     # don't look into unwanted folders
@@ -31,11 +30,9 @@ for dirs, subdirs, files in os.walk(datadir):
                     except IndexError:
                         continue
 
-# Creates lookup dictionaries
-for idx,lbl in enumerate(set(labels)):
-    idx2lbl[idx] = lbl
-    lbl2idx[lbl] = idx
-num_lbls = [lbl2idx[lbl] for lbl in labels]
-
-data = np.asarray([arguments, num_lbls, idx2lbl, lbl2idx])
-np.save('../data/test_data.npy', data)
+# save the data
+data = "\n".join(arguments)
+file = open('../data/test_data.txt', 'w')
+file.write(data)
+file.close()
+np.save("..argsim/data/test_labels.npy", np.asarray(labels))
