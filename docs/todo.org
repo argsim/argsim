@@ -1,3 +1,11 @@
+* clustering
+
+- reason dataset -> arguments (plain text), labels
+- l1 logistic classifier
+- clustering
+
+* kuan
+
 - try init with scale 1.0
 - try logit embed sharing
 - tune model size
