@@ -4,11 +4,11 @@
 - l1 logistic classifier
 - clustering
 
-* kuan
+* tuning
 
+- tune model size
 - try init with scale 1.0
 - try logit embed sharing
-- tune model size
 - try separate relu layers for mu and lv
 
 * word dropout
