@@ -1,4 +1,5 @@
 from util import identity, partial, Record
+from util_np import np
 from util_tf import tf, placeholder
 
 
@@ -27,17 +28,14 @@ def vAe(mode,
         bos=2,
         eos=1):
 
-    # mode
-    # train: word dropout, optimizer
-    # valid: without those
-    # infer: autoregressive decoder
-    #
     # dim_tgt : vocab size
     # dim_emb : model dimension
     # dim_rep : representation dimension
+    #
+    # unk=0
 
     assert mode in ('train', 'valid', 'infer')
-    self = Record()
+    self = Record(bos=bos, eos=eos)
 
     with scope('tgt'):
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
@@ -119,47 +117,85 @@ def vAe(mode,
         h = layer_act(h, dim_emb, name='ex2')
 
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
-        h = tf.expand_dims(h, 0),
-        h, _ = tf.contrib.cudnn_rnn.CudnnGRU(
+        self.tgt_dec = tgt_dec
+        h = self.state_in = tf.expand_dims(h, 0)
+        h, _ = _, (self.state_ex,) = tf.contrib.cudnn_rnn.CudnnGRU(
             num_layers=1, # keep the decoder simple for now
             num_units=dim_emb,
             kernel_initializer=init_kern,
             bias_initializer=init_bias
-        )(embed_dec, initial_state=h)
-        h = tf.boolean_mask(h, mask_dec)
+        )(embed_dec, initial_state=(h,))
+        if 'infer' != mode: h = tf.boolean_mask(h, mask_dec)
         h = layer_act(h, dim_emb, name='out1')
         h = layer_act(h, dim_emb, name='out2')
 
     with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
         if logit_use_embed:
-            logits = self.logits = tf.matmul(h, embedding, transpose_b=True)
+            logits = self.logits = tf.tensordot(h, tf.transpose(embedding), 1)
         else:
             logits = self.logits = layer_aff(h, dim_tgt)
 
-    with scope('prob'):
-        prob = self.prob = tf.nn.softmax(logits)
+    with scope('prob'): prob = self.prob = tf.nn.softmax(logits)
+    with scope('pred'): pred = self.pred = tf.argmax(logits, -1, output_type=tf.int32)
 
-    with scope('pred'):
-        pred = self.pred = tf.argmax(logits, -1, output_type=tf.int32)
-
-    labels = tf.boolean_mask(tgt_enc, mask_dec, name='labels')
-
-    with scope('acc'):
-        acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
-
-    step = self.step = tf.train.get_or_create_global_step()
-    with scope('loss'):
-        with scope('loss_gen'):
-            loss_gen = self.loss_gen = tf.reduce_mean(
-                tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
-        with scope('loss_kld'):
-            loss_kld = self.loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
-        with scope('balance'):
-            balance = self.balance = tf.nn.relu(tf.tanh(accelerate * (tf.to_float(step) - warmup)))
-        loss = self.loss = balance * loss_kld + loss_gen
+    if 'infer' != mode:
+        labels = tf.boolean_mask(tgt_enc, mask_dec, name='labels')
+        with scope('acc'): acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
+        step = self.step = tf.train.get_or_create_global_step()
+        with scope('loss'):
+            with scope('loss_gen'):
+                loss_gen = self.loss_gen = tf.reduce_mean(
+                    tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+            with scope('loss_kld'):
+                loss_kld = self.loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
+            with scope('balance'):
+                balance = self.balance = tf.nn.relu(tf.tanh(accelerate * (tf.to_float(step) - warmup)))
+            loss = self.loss = balance * loss_kld + loss_gen
 
     if 'train' == mode:
         with scope('train'):
             train_step = self.train_step = tf.train.AdamOptimizer().minimize(loss, step)
 
     return self
+
+
+def encode(sess, vae, tgt):
+    """returns latent state parameters `mu` and `lv` given `tgt`
+
+    tgt : array i32 (b, t)
+     mu : array f32 (b, dim_rep)
+     lv : array f32 (b, dim_rep)
+
+    """
+    return sess.run((vae.mu, vae.lv), {vae.tgt: tgt})
+
+
+def decode(sess, vae, z, steps= 256):
+    """-> array i32 (b, t)
+
+    z :  array f32 (b, dim_rep)
+    t <= steps
+
+    decodes latent states
+
+    """
+    x = np.full((1, len(z)), vae.bos, dtype=np.int32)
+    s = vae.state_in.eval({vae.z: z})
+    y = []
+    for _ in range(steps):
+        x, s = sess.run((vae.pred, vae.state_ex), {vae.tgt_dec: x, vae.state_in: s})
+        if np.all(x == vae.eos): break
+        y.append(x)
+    return np.concatenate(y).T
+
+
+def sample(mu, lv, size):
+    """-> array f32 (size, dim_rep)
+
+    mu : array f32 dim_rep
+    lv : array f32 dim_rep
+
+    samples latent states given mean `mu` and log variance `lv`
+
+    """
+    return mu + np.exp(0.5 * lv) * np.random.randn(size, len(lv))
