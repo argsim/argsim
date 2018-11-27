@@ -4,7 +4,7 @@ import sys
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "cudnn"
+trial = "attention"
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -15,7 +15,7 @@ path_log = "/cache/tensorboard-logdir/argsim" # on jarvis
 
 seed = 0
 batch_train = 256
-batch_valid = 1024
+batch_valid = 512
 # batch_train = 64
 # batch_valid = 256
 
