@@ -48,18 +48,20 @@ def vAe(mode,
     dropout = identity
 
     with scope('input'):
-        tgt = tf.transpose(tgt) # time major order
-        with scope('length'):
-            length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), 0)
-            maxlen = tf.reduce_max(length)
-        with scope('mask'):
-            mask = tf.transpose(tf.sequence_mask(length, maxlen=maxlen))
-        with scope('gold'):
-            labels = tf.boolean_mask(tgt[1:maxlen+1], mask)
-        with scope('tgt_dec'):
-            tgt_dec = tgt[0:maxlen]
-        with scope('tgt_enc'):
-            tgt_enc = tgt[1:maxlen]
+        # bt -> tb time major order
+        tgt = tf.transpose(tgt)
+        # tgt = tf.constant([[2,2,2],[3,4,1],[5,1,1],[1,1,1]], dtype=tf.int32)
+        with scope('not_eos'): not_eos = tf.not_equal(tgt, eos)
+        with scope('lengths'): lengths = tf.reduce_sum(tf.to_int32(not_eos), 0)
+        with scope('max_len'): max_len = tf.reduce_max(lengths) # should be t-1
+        # include one eos during encoding for attention query
+        with scope('tgt_enc'): tgt_enc = tgt[1:max_len+1]
+        with scope('mask_enc'): mask_enc = not_eos[1:max_len+1]
+        # include the bos during decoding for the initial step
+        with scope('tgt_dec'): tgt_dec = tgt[0:max_len]
+        with scope('mask_dec'): mask_dec = not_eos[:-1]
+        with scope('labels'): labels = tf.boolean_mask(tgt_enc, mask_dec)
+        # todo figure out how to use scatter_nd to restore lengths and labels to tgt_enc
 
     with scope('embed'):
         # (t, b) -> (t, b, dim_emb)
@@ -71,6 +73,7 @@ def vAe(mode,
             with scope('word_dropout'):
                 # pad to never drop bos
                 tgt_dec *= tf.pad(
+                    # todo fixme tgt_enc shape is now changed
                     tf.to_int32(dropout_word <= tf.random_uniform(tf.shape(tgt_enc))),
                     paddings=((1,0),(0,0)),
                     constant_values=1)
@@ -88,11 +91,20 @@ def vAe(mode,
             direction='unidirectional',
             dropout=dropout_rate if 'train' == mode else 0.0
         )(embed_enc)
-        # extract the states from the outputs at the steps corresponding to the lengths;
-        # since the encoder does not take bos, and the indices are one less of the lengths,
-        # in total it must be offset by 2
         with scope('cata'):
-            h = tf.gather_nd(h, tf.stack((length-2, tf.range(tf.size(length), dtype=tf.int32)), axis=-1))
+            h = tf.einsum( # attend
+                'tbd,tb->bd', h,
+                tf.nn.softmax( # normalize
+                    tf.einsum( # weight
+                        'tbd,bd->tb', h,
+                        # extract the final states from the outputs
+                        tf.gather_nd(h, tf.stack(
+                            (lengths-1, tf.range(tf.size(lengths), dtype=tf.int32)), axis=-1)))
+                    # scale
+                    * (dim_emb ** -0.5)
+                    # mask
+                    + tf.log(tf.to_float(mask_enc)),
+                    axis=0))
 
     with scope('latent'):
         # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
@@ -114,7 +126,7 @@ def vAe(mode,
             direction='unidirectional',
             dropout=dropout_rate if 'train' == mode else 0.0
         )(embed_dec, initial_state=(tf.expand_dims(h, 0),))
-        h = tf.boolean_mask(h, mask)
+        h = tf.boolean_mask(h, mask_dec)
         with scope('out1'): h = dropout(layer_act(h, dim_emb))
         with scope('out2'): h = dropout(layer_act(h, dim_emb))
 
