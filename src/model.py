@@ -44,10 +44,9 @@ def vAe(mode,
         tgt = tf.transpose(tgt) # time major order
         not_eos = tf.not_equal(tgt, eos)
         len_raw = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
-        len_seq = len_raw + 1
-        max_len = tf.reduce_max(len_seq)
+        max_raw = tf.reduce_max(len_raw)
         # trims extra bos to make sure the lengths are right
-        tgt, not_eos = tgt[:max_len], not_eos[:max_len]
+        tgt, not_eos, len_seq = tgt[:max_raw], not_eos[:max_raw], len_raw + 1
 
     with scope('mask'):
         mask_dec = tf.pad(not_eos, ((1,0),(0,0)), constant_values=True)
