@@ -44,6 +44,9 @@ def vAe(mode,
     else:
         dropout = identity
 
+    dropout_rate = 0.0
+    dropout = identity
+
     with scope('input'):
         tgt = tf.transpose(tgt) # time major order
         with scope('length'):
