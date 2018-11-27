@@ -31,7 +31,7 @@ def vAe(mode,
     # train: word dropout, optimizer
     # valid: without those
     # infer: autoregressive decoder
-
+    #
     # dim_tgt : vocab size
     # dim_emb : model dimension
     # dim_rep : representation dimension
@@ -39,39 +39,51 @@ def vAe(mode,
     assert mode in ('train', 'valid', 'infer')
     self = Record()
 
-    # int32 (b, t), batch size by max length;
-    # each sequence is expected to be padded one bos at the beginning,
-    # and at least one eos til the end
-    tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
+    with scope('tgt'):
+        tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
+        tgt = tf.transpose(tgt) # time major order
+        not_eos = tf.not_equal(tgt, eos)
+        len_raw = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
+        len_seq = len_raw + 1
+        max_len = tf.reduce_max(len_seq)
+        # trims extra bos to make sure the lengths are right
+        tgt, not_eos = tgt[:max_len], not_eos[:max_len]
 
-    with scope('input'):
-        tgt = tf.transpose(tgt) # bt -> tb time major order
-        # tgt = tf.constant([[2,2,2],[3,4,1],[5,1,1],[1,1,1]], dtype=tf.int32) # for testing
-        with scope('not_eos'): not_eos = tf.not_equal(tgt, eos)
-        with scope('lengths'): lengths = tf.reduce_sum(tf.to_int32(not_eos), 0)
-        with scope('max_len'): max_len = tf.reduce_max(lengths)
-        # include the bos during decoding for the initial step
-        with scope('tgt_dec'): tgt_dec, mask_dec = tgt[0:max_len],   not_eos[0:max_len]
-        # include one eos during encoding for attention query
-        with scope('tgt_enc'): tgt_enc, mask_enc = tgt[1:max_len+1], not_eos[1:max_len+1]
-        with scope('labels'): labels = tf.boolean_mask(tgt_enc, mask_dec)
+    with scope('mask'):
+        mask_dec = tf.pad(not_eos, ((1,0),(0,0)), constant_values=True)
+        mask_enc = tf.pad(not_eos, ((0,1),(0,0)), constant_values=False)
 
-    with scope('embed'):
-        # (t, b) -> (t, b, dim_emb)
+    with scope('embed'): # (t, b) -> (t, b, dim_emb)
         embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=init_embd)
-        if 'train' == mode:
-            with scope('drop_word'):
-                # pad to never drop bos
-                tgt_dec = tgt_dec[1:]
-                tgt_dec = tf.pad(
-                    tgt_dec * tf.to_int32(drop_word <= tf.random_uniform(tf.shape(tgt_dec))),
-                    paddings=((1,0),(0,0)),
-                    constant_values=bos)
-        embed_dec = tf.gather(embedding, tgt_dec, name='embed_dec')
-        embed_enc = tf.gather(embedding, tgt_enc, name='embed_enc')
+        with scope('embed_enc'): # pads one eos for the attention query
+            tgt_enc = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
+            embed_enc = tf.gather(embedding, tgt_enc)
+        with scope('embed_dec'): # pads one bos for the initial step
+            if 'train' == mode:
+                with scope('drop_word'):
+                    tgt *= tf.to_int32(drop_word <= tf.random_uniform(tf.shape(tgt)))
+            tgt_dec = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
+            embed_dec = tf.gather(embedding, tgt_dec)
 
-    with scope('encode'):
-        # (t, b, dim_emb) -> (b, dim_emb)
+    # s : actual length
+    # t : s + 1, with padding, either eos or bos
+    # b : batch size
+    # d : dimension aka dim_emb
+    #
+    # len_raw   :  b  aka s
+    # len_seq   :  b  aka t
+    #
+    # not_eos   : sb
+    # mask_enc  : tb  with eos
+    # mask_dec  : tb  with bos
+    #
+    # tgt_enc   : tb  with eos
+    # tgt_dec   : tb  with bos
+    #
+    # embed_enc : tbd with eos
+    # embed_dec : tbd with bos
+
+    with scope('encode'): # (t, b, dim_emb) -> (b, dim_emb)
         # bidirectional won't work correctly without length mask which cudnn doesn't take;
         # stick to unidirectional for now;
         # maybe combine this with a reverse run
@@ -83,7 +95,7 @@ def vAe(mode,
         )(embed_enc)
         with scope('cata'):
             # extract the final states which are the outputs from the first eos steps
-            h = bd = tf.gather_nd(tbd, tf.stack((lengths-1, tf.range(tf.size(lengths), dtype=tf.int32)), axis=1))
+            h = bd = tf.gather_nd(tbd, tf.stack((len_raw, tf.range(tf.size(len_raw), dtype=tf.int32)), axis=1))
             if attentive:
                 # scaled dot-product attention;
                 # the values are the outputs from all non-eos steps;
@@ -97,8 +109,7 @@ def vAe(mode,
                 h = tf.squeeze(a @ v, 1) # attend: bd <- b1d <- b1t @ btd
                 # h += bd # residual connection
 
-    with scope('latent'):
-        # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
+    with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         h = layer_act(h, dim_emb, name='in')
         h_mu = layer_act(h, dim_emb, name='in_mu')
         h_lv = layer_act(h, dim_emb, name='in_lv')
@@ -108,8 +119,7 @@ def vAe(mode,
         h = layer_act(h, dim_emb, name='ex1')
         h = layer_act(h, dim_emb, name='ex2')
 
-    with scope('decode'):
-        # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
+    with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
         h = tf.expand_dims(h, 0),
         h, _ = tf.contrib.cudnn_rnn.CudnnGRU(
             num_layers=1, # keep the decoder simple for now
@@ -121,8 +131,7 @@ def vAe(mode,
         h = layer_act(h, dim_emb, name='out1')
         h = layer_act(h, dim_emb, name='out2')
 
-    with scope('logit'):
-        # (?, dim_emb) -> (?, dim_tgt)
+    with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
         if logit_use_embed:
             logits = self.logits = tf.matmul(h, embedding, transpose_b=True)
         else:
@@ -133,6 +142,8 @@ def vAe(mode,
 
     with scope('pred'):
         pred = self.pred = tf.argmax(logits, -1, output_type=tf.int32)
+
+    labels = tf.boolean_mask(tgt_enc, mask_dec, name='labels')
 
     with scope('acc'):
         acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
