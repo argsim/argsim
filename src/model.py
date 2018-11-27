@@ -105,8 +105,8 @@ def vAe(mode,
         mu = self.mu = layer_aff(h_mu, dim_rep, name='mu')
         lv = self.lv = layer_aff(h_lv, dim_rep, name='lv')
         with scope('z'): h = self.z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = layer_act(h, dim_emb, 'ex1')
-        h = layer_act(h, dim_emb, 'ex2')
+        h = layer_act(h, dim_emb, name='ex1')
+        h = layer_act(h, dim_emb, name='ex2')
 
     with scope('decode'):
         # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
