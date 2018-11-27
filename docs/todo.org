@@ -6,17 +6,10 @@
 
 * tuning
 
+- word dropout (see log)
+- attention (see log)
+- learning rate
 - model size
-- dropout rate
-- try init with scale 1.0
-- try logit embed sharing
-- try separate relu layers for mu and lv
-
-* attentional encoder
-
-- bidirectional rnn
-- final state as query
-- outputs as values
 
 * convolutional decoder
 

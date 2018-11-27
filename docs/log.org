@@ -1,0 +1,79 @@
+* dropout
+
+applying dropout always made the model worse,
+dropout may not be suitable for vaes anyways,
+since it forces the model to learn a distributed representation,
+whereas with vaes we want a disentangled representation.
+
+* word dropout
+
+=drop_word=
+
+currently we use 50% word dropout for decoder,
+where the inputs are randomly replaced with =unk=.
+
+consider these alternatives:
+- randomly replace inputs
+- randomly set embedded inputs to zeros (a variant of dropout)
+
+* input output embedding sharing
+
+=logit_use_embed=
+
+the idea came from [[https://arxiv.org/abs/1608.05859][press & wolf]].
+however it always made our model worse.
+it's not necessary for a model using sentencepiece anyways.
+
+* initialization
+
+random initialization seems to play a surprisingly important role for this model.
+
+currently all biases are initialized to zeros;
+the affine and recurrent layers are initialized according to [[http://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf][glorot & bengio]]
+(=variance scaling 1.0 fan_avg=, tensorflow default),
+the embedding layer with =variance scaling 1.0 fan_out=,
+and the relu layers with =variance scaling 2.0 fan_in= according to [[https://arxiv.org/abs/1502.01852][he et al.]]
+
+when we changed the relu init to glorot,
+the results are similar at first,
+but becomes noticably worse after 20k training steps,
+presumably due to having more relu units dying out.
+
+using glorot or he init for the embedding layer also made the model slightly worse.
+
+* separate relu layers for mean and variance
+
+usually vaes use two affine or linear transformations
+to compute the mean and log variance from the encoder output,
+and some non-linear transformations can be applied before that.
+but why should the mean and log variance be linear or affine to each other.
+we apply one affine followed by one relu layer for each, followed by one shared relu layer.
+this improved the model noticably.
+
+* attention
+
+=attentive=
+
+currently the encoder is a unidirectional gru rnn.
+the reason for not using a bidirectional one is that the =cudnn= implementations
+do not support variable lengthed sequences at the moment,
+but it is so much faster than the alternatives.
+for unidirectional rnns, this is not a problem, not for grus anyways,
+since we can just extract the states from the outputs.
+however bidirectional ones won't behave correctly.
+
+the unidirectional encoder was a lot worse than the bidirectional one, until we added attention.
+specifically, the final states after the first =eos= are used as queries,
+and the outputs from all non-padding steps are used as values.
+the summarized values are now the encoder outputs.
+attention significantly improved the model.
+
+currently we use scaled dot-product attention.
+consider these alterations:
+
+- key value attention
+- multihead attention
+
+- add a backward rnn, use the backward final states to query the forward outputs, and vice versa
+
+- maybe the gru rnn can the replaced with vanilla relu rnn with the help of attention
