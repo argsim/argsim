@@ -4,7 +4,7 @@ import sys
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "cudnn"
+trial = "mu-lv"
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
