@@ -23,6 +23,7 @@ def vAe(mode,
         dropout_word=0.5,
         accelerate=1e-4,
         warmup=1e4,
+        bos=2,
         eos=1):
     # mode
     # train: dropout, word dropout, optimizer
@@ -36,7 +37,10 @@ def vAe(mode,
     assert mode in ('train', 'valid', 'infer')
     self = Record()
 
-    # int32 (b, t)  | batchsize, timestep
+    # int32 (b, t), batch size by max length;
+    # each sequence is expected to be padded one bos at the beginning,
+    # and at least one eos til the end;
+    # todo perform padding as part of the graph and not preprocessing
     tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
 
     if 'train' == mode:
@@ -53,13 +57,11 @@ def vAe(mode,
         # tgt = tf.constant([[2,2,2],[3,4,1],[5,1,1],[1,1,1]], dtype=tf.int32)
         with scope('not_eos'): not_eos = tf.not_equal(tgt, eos)
         with scope('lengths'): lengths = tf.reduce_sum(tf.to_int32(not_eos), 0)
-        with scope('max_len'): max_len = tf.reduce_max(lengths) # should be t-1
-        # include one eos during encoding for attention query
-        with scope('tgt_enc'): tgt_enc = tgt[1:max_len+1]
-        with scope('mask_enc'): mask_enc = not_eos[1:max_len+1]
+        with scope('max_len'): max_len = tf.reduce_max(lengths)
         # include the bos during decoding for the initial step
-        with scope('tgt_dec'): tgt_dec = tgt[0:max_len]
-        with scope('mask_dec'): mask_dec = not_eos[:-1]
+        with scope('tgt_dec'): tgt_dec, mask_dec = tgt[0:max_len],   not_eos[0:max_len]
+        # include one eos during encoding for attention query
+        with scope('tgt_enc'): tgt_enc, mask_enc = tgt[1:max_len+1], not_eos[1:max_len+1]
         with scope('labels'): labels = tf.boolean_mask(tgt_enc, mask_dec)
         # todo figure out how to use scatter_nd to restore lengths and labels to tgt_enc
 
@@ -72,11 +74,11 @@ def vAe(mode,
         if 'train' == mode:
             with scope('word_dropout'):
                 # pad to never drop bos
-                tgt_dec *= tf.pad(
-                    # todo fixme tgt_enc shape is now changed
-                    tf.to_int32(dropout_word <= tf.random_uniform(tf.shape(tgt_enc))),
+                tgt_dec = tgt_dec[1:]
+                tgt_dec = tf.pad(
+                    tgt_dec * tf.to_int32(dropout_word <= tf.random_uniform(tf.shape(tgt_dec))),
                     paddings=((1,0),(0,0)),
-                    constant_values=1)
+                    constant_values=bos)
         with scope('embed_dec'): embed_dec = dropout(tf.gather(embedding, tgt_dec))
         with scope('embed_enc'): embed_enc = dropout(tf.gather(embedding, tgt_enc))
 
