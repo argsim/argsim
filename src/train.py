@@ -15,7 +15,7 @@ path_log = "/cache/tensorboard-logdir/argsim" # on jarvis
 
 seed = 0
 batch_train = 256
-batch_valid = 1024
+batch_valid = 512
 # batch_train = 64
 # batch_valid = 256
 
