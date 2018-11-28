@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 
-import sys
+import sys, os
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "biatt"
+trial = "cudnn"
 
+from os.path import expanduser
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
 path_valid = "../trial/data/valid.npy"
 path_ckpt = "../trial/ckpt"
-path_log = "../trial/log" # on colab
-path_log = "/cache/tensorboard-logdir/argsim" # on jarvis
+path_log = "~/cache/tensorboard-logdir/argsim"
 
 seed = 0
 batch_train = 256
@@ -86,12 +86,10 @@ def summ(step, model=model_valid):
         for i, j in partition(len(valid), batch_valid, discard= False))))
     wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
 
-# with the current dataset and batch size, about 5k steps per epoch
-# train for 2 epochs at a time
-for _ in range(2):
-    for _ in range(100):
+for _ in range(4):
+    for _ in range(100): # about 2 epochs
         for _ in tqdm(range(100), ncols= 70):
             sess.run(model_train.train_step)
         step = sess.run(model_train.step)
         summ(step)
-saver.save(sess, pform(path_ckpt, trial, step // 10000), write_meta_graph= False)
+    saver.save(sess, pform(path_ckpt, trial, step // 10000), write_meta_graph= False)
