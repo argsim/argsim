@@ -56,7 +56,6 @@ def vAe(mode,
         # training spec
         drop_word=0.5,
         accelerate=1e-4,
-        warmup=1e4,
         bos=2,
         eos=1):
 
@@ -179,10 +178,11 @@ def vAe(mode,
                 loss_gen = self.loss_gen = tf.reduce_mean(
                     tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
             with scope('loss_kld'):
+                anneal = self.anneal = tf.tanh(accelerate * tf.to_float(step))
+                mu *= anneal
+                lv *= anneal
                 loss_kld = self.loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
-            with scope('balance'):
-                balance = self.balance = tf.nn.relu(tf.tanh(accelerate * (tf.to_float(step) - warmup)))
-            loss = self.loss = balance * loss_kld + loss_gen
+            loss = self.loss = loss_kld + loss_gen
 
     if 'train' == mode:
         with scope('train'):
