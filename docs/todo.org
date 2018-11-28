@@ -8,6 +8,7 @@
 
 - word dropout (see log)
 - attention (see log)
+- relu layers (see log)
 - learning rate
 - model size
 
