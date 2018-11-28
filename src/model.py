@@ -4,11 +4,13 @@ from util_tf import tf, placeholder
 
 
 init_bias = tf.zeros_initializer()
-init_embd = tf.variance_scaling_initializer(1.0, 'fan_out', 'uniform')
 init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
-init_relu = tf.variance_scaling_initializer(2.0, 'fan_in' , 'uniform')
+init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
+
 layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
-layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias)
+layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias, activation=tf.nn.relu)
+layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern, bias_initializer=init_bias)
+
 scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
@@ -51,7 +53,7 @@ def vAe(mode,
         mask_enc = tf.pad(not_eos, ((0,1),(0,0)), constant_values=False)
 
     with scope('embed'): # (t, b) -> (t, b, dim_emb)
-        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=init_embd)
+        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-0.5, 0.5))
         with scope('embed_enc'): # pads one eos for the attention query
             tgt_enc = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
             embed_enc = tf.gather(embedding, tgt_enc)
@@ -82,12 +84,7 @@ def vAe(mode,
         # bidirectional won't work correctly without length mask which cudnn doesn't take;
         # stick to unidirectional for now;
         # maybe combine this with a reverse run
-        tbd, _ = tf.contrib.cudnn_rnn.CudnnGRU(
-            num_layers=rnn_layers,
-            num_units=dim_emb,
-            kernel_initializer=init_kern,
-            bias_initializer=init_bias
-        )(embed_enc)
+        tbd, _ = layer_rnn(rnn_layers, dim_emb)(embed_enc)
         with scope('cata'):
             # extract the final states which are the outputs from the first eos steps
             h = bd = tf.gather_nd(tbd, tf.stack((len_seq, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1))
@@ -97,7 +94,12 @@ def vAe(mode,
                 # the queries are the final states
                 v = tf.transpose(tbd, (1,0,2)) # values: btd <- tbd
                 q = tf.expand_dims(bd, axis=1) # queries: b1d <- bd
-                a = tf.matmul(q, v, transpose_b=True) # weights: b1t <- b1d @ (bdt <- btd)
+                k = v
+                if False: # key value attention
+                    k = layer_aff(v, dim_rep, name='k') # btd key
+                    v = layer_aff(v, dim_rep, name='v') # btd value
+                    q = layer_aff(q, dim_rep, name='q') # b1d query
+                a = tf.matmul(q, k, transpose_b=True) # weights: b1t <- b1d @ (bdt <- btd)
                 a *= dim_emb ** -0.5 # scale by sqrt dim_emb
                 a += tf.log(tf.to_float(tf.expand_dims(tf.transpose(mask_enc), 1))) # mask eos steps
                 a = tf.nn.softmax(a) # normalize
@@ -105,31 +107,34 @@ def vAe(mode,
                 # h += bd # residual connection
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        h = layer_act(h, dim_emb, name='in')
-        h_mu = layer_act(h, dim_emb, name='in_mu')
-        h_lv = layer_act(h, dim_emb, name='in_lv')
-        mu = self.mu = layer_aff(h_mu, dim_rep, name='mu')
-        lv = self.lv = layer_aff(h_lv, dim_rep, name='lv')
+        # h = layer_act(h, dim_emb, name='in')
+        # h_mu = layer_act(h, dim_emb, name='in_mu')
+        # h_lv = layer_act(h, dim_emb, name='in_lv')
+        h = layer_aff(h, dim_emb, name='in1')
+        h = layer_aff(h, dim_emb, name='in2')
+        mu = self.mu = layer_aff(h, dim_rep, name='mu')
+        lv = self.lv = layer_aff(h, dim_rep, name='lv')
         with scope('z'): h = self.z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = layer_act(h, dim_emb, name='ex1')
-        h = layer_act(h, dim_emb, name='ex2')
+        # h = layer_act(h, dim_emb, name='ex')
+        h = layer_aff(h, dim_emb, name='ex1')
+        h = layer_aff(h, dim_emb, name='ex2')
+        # h = layer_act(h, dim_emb, name='ex1')
+        # h = layer_act(h, dim_emb, name='ex2')
 
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
         self.tgt_dec = tgt_dec
         h = self.state_in = tf.expand_dims(h, 0)
-        h, _ = _, (self.state_ex,) = tf.contrib.cudnn_rnn.CudnnGRU(
-            num_layers=1, # keep the decoder simple for now
-            num_units=dim_emb,
-            kernel_initializer=init_kern,
-            bias_initializer=init_bias
-        )(embed_dec, initial_state=(h,))
+        h, _ = _, (self.state_ex,) = layer_rnn(1, dim_emb)(embed_dec, initial_state=(h,))
+        # keep the decoder simple for now by using more dense instead of rnn layers
         if 'infer' != mode: h = tf.boolean_mask(h, mask_dec)
-        h = layer_act(h, dim_emb, name='out1')
-        h = layer_act(h, dim_emb, name='out2')
+        # h = layer_act(h, dim_emb, name='out1')
+        # h = layer_act(h, dim_emb, name='out2')
+        h = layer_aff(h, dim_emb, name='out1')
+        h = layer_aff(h, dim_emb, name='out2')
 
     with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
         if logit_use_embed:
-            logits = self.logits = tf.tensordot(h, tf.transpose(embedding), 1)
+            logits = self.logits = tf.tensordot(h, (dim_emb ** -0.5) * tf.transpose(embedding), 1)
         else:
             logits = self.logits = layer_aff(h, dim_tgt)
 

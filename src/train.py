@@ -4,7 +4,7 @@ import sys
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "attention"
+trial = "cudnn"
 
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
@@ -88,10 +88,10 @@ def summ(step, model=model_valid):
 
 # with the current dataset and batch size, about 5k steps per epoch
 # train for 2 epochs at a time
-for _ in range(5):
+for _ in range(2):
     for _ in range(100):
         for _ in tqdm(range(100), ncols= 70):
             sess.run(model_train.train_step)
         step = sess.run(model_train.step)
         summ(step)
-    saver.save(sess, pform(path_ckpt, trial, step // 10000), write_meta_graph= False)
+saver.save(sess, pform(path_ckpt, trial, step // 10000), write_meta_graph= False)
