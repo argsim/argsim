@@ -15,7 +15,7 @@ layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern,
 scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
-def attention(query, value, mask, dim, transform=False):
+def attention(query, value, mask, dim, head=1, transform=False):
     """computes scaled dot-product attention
 
     query : tensor f32 (b, s, d_q)
@@ -25,17 +25,23 @@ def attention(query, value, mask, dim, transform=False):
 
     transform may be omitted when `dim == d_q == d_v`
 
+    `dim` must be divisible by `head`
+
     """
+    assert not dim % head
     k, v, q = value, value, query
     if transform:
         k = layer_aff(k, dim, name='k') # btd key
         v = layer_aff(v, dim, name='v') # btd value
         q = layer_aff(q, dim, name='q') # bsd query
-    a = tf.matmul(q, k, transpose_b=True) # weight: bst <- bsd @ (bdt <- btd)
-    a *= dim ** -0.5 # scale by sqrt dim
-    a += mask # mask
-    a = tf.nn.softmax(a) # normalize
-    return a @ v # attend: bsd <- bst @ btd
+    if 1 < head: k, v, q = map(lambda x: tf.stack(tf.split(x, head, -1)), (k, v, q))
+    a = tf.nn.softmax(
+        tf.matmul(q, k, transpose_b=True) # weight: bst <- bsd @ (bdt <- btd)
+        * ((dim // head) ** -0.5) # scale by sqrt d
+        + mask # mask
+    ) @ v # attend: bsd <- bst @ btd
+    if 1 < head: a = tf.concat(tf.unstack(a), -1)
+    return a
 
 
 def vAe(mode,
@@ -153,6 +159,7 @@ def vAe(mode,
         h, _ = _, (self.state_ex,) = layer_rnn(1, dim_emb, name='rnn')(embed_dec, initial_state=(h,))
         # keep the decoder simple for now, just 1 rnn layer
         if 'infer' != mode: h = tf.boolean_mask(h, mask_dec)
+        h = layer_aff(h, dim_emb, name='out')
 
     with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
         if logit_use_embed:
