@@ -41,10 +41,10 @@ def vAe(mode,
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
         tgt = tf.transpose(tgt) # time major order
         not_eos = tf.not_equal(tgt, eos)
-        len_raw = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
-        max_raw = tf.reduce_max(len_raw)
+        len_seq = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
+        max_len = tf.reduce_max(len_seq)
         # trims extra bos to make sure the lengths are right
-        tgt, not_eos, len_seq = tgt[:max_raw], not_eos[:max_raw], len_raw + 1
+        tgt, not_eos = tgt[:max_len], not_eos[:max_len]
 
     with scope('mask'):
         mask_dec = tf.pad(not_eos, ((1,0),(0,0)), constant_values=True)
@@ -62,15 +62,13 @@ def vAe(mode,
             tgt_dec = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
             embed_dec = tf.gather(embedding, tgt_dec)
 
-    # s : actual length
-    # t : s + 1, with padding, either eos or bos
+    # t : seq length plus one padding, either eos or bos
     # b : batch size
     # d : dimension aka dim_emb
     #
-    # len_raw   :  b  aka s
-    # len_seq   :  b  aka t
+    # len_seq   :  b  aka t-1
+    # not_eos   : sb  where s = t-1
     #
-    # not_eos   : sb
     # mask_enc  : tb  with eos
     # mask_dec  : tb  with bos
     #
@@ -92,7 +90,7 @@ def vAe(mode,
         )(embed_enc)
         with scope('cata'):
             # extract the final states which are the outputs from the first eos steps
-            h = bd = tf.gather_nd(tbd, tf.stack((len_raw, tf.range(tf.size(len_raw), dtype=tf.int32)), axis=1))
+            h = bd = tf.gather_nd(tbd, tf.stack((len_seq, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1))
             if attentive:
                 # scaled dot-product attention;
                 # the values are the outputs from all non-eos steps;
