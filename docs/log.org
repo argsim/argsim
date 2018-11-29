@@ -23,22 +23,34 @@ whereas with vaes we want a disentangled representation.
 
 * word dropout
 
-=drop_word=
+randomly replacing words for the decoder with =unk= forces the model to use information provided by the encoder.
+crippling the decoder is desirable at the beginning,
+however evetually how well the encoder learns is determined by the decoder,
+since in a vae the encoder is the inference network mirroring of the decoder.
 
-currently we use 50% word dropout for decoder,
-where the inputs are randomly replaced with =unk=.
+currently we an adaptive word keep rate, from 50% to 100% by the logistic curve.
 
-consider these alternatives:
-- randomly replace inputs
-- randomly set embedded inputs to zeros (a variant of dropout)
+we tried a variant where instead of =unk=, random words are picked.
+this resulted in lower training accuracy and higher loss,
+but the autoregressively generated sentences seem better.
+random swapping may be a remedy for teacher forcing training.
+however since using the decoder autoregressively is not our priority,
+and the adaptive dropout rate is eventually zero,
+we are not considering this option for now.
 
 * input output embedding sharing
 
 =logit_use_embed=
 
 the idea came from [[https://arxiv.org/abs/1608.05859][press & wolf]].
-however it always made our model worse.
-it's not necessary for a model using sentencepiece anyways.
+
+simply using the transposed embedding matrix as the logit weights is detrimental.
+the inputs and ouputs are not entirely symmetric,
+specifically the outputs are softmax proboabilities and the inputs are not.
+
+however when we scaled the input embedding by =sqrt dim_emb= to be used as the output embedding,
+as used by [[https://arxiv.org/abs/1706.03762][vaswani et al.]] in the transformer,
+it does make the model train slightly better.
 
 * initialization
 
