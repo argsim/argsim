@@ -28,6 +28,10 @@ crippling the decoder is desirable at the beginning,
 however evetually how well the encoder learns is determined by the decoder,
 since in a vae the encoder is the inference network mirroring of the decoder.
 
+without word dropout, the accuracy is better,
+even though we disable word dropout during validation.
+however is autoregressively generated results are far worse.
+
 currently we an adaptive word keep rate, from 50% to 100% by the logistic curve.
 
 we tried a variant where instead of =unk=, random words are picked.
@@ -57,7 +61,6 @@ it does make the model train slightly better.
 random initialization seems to play a surprisingly important role for this model.
 
 currently all biases are initialized to zeros;
-the embedding is initialized with =uniform(-0.5,0.5)=;
 the affine and recurrent layers are initialized according to [[http://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf][glorot & bengio]]
 (=variance scaling 1.0 fan_avg=, tensorflow default);
 and the relu layers with =variance scaling 2.0 fan_avg= according to [[https://arxiv.org/abs/1502.01852][he et al.]]
@@ -66,6 +69,10 @@ the idea behind variance scaling is to keep the variance stable;
 =fan_in= keeps it stable for the forward pass;
 =fan_out= keeps it stable for the backward pass;
 =fan_avg= makes a trade off.
+
+the embedding is uniformly initialized with the bound =sqrt(6/(dim_tgt/dim_emb+1))=,
+which when scaled and used as the logit weights,
+is equivalent to having the logit layer initialized the default way.
 
 when we changed the relu init to glorot,
 the results are similar at first,
