@@ -75,7 +75,6 @@ else:
 wtr = tf.summary.FileWriter(pform(path_log, trial))
 summary = tf.summary.merge(
     (tf.summary.scalar('step_acc',      model_valid['acc']),
-     tf.summary.scalar('step_loss',     model_valid['loss']),
      tf.summary.scalar('step_loss_gen', model_valid['loss_gen']),
      tf.summary.scalar('step_loss_kld', model_valid['loss_kld'])))
 
