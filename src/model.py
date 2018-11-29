@@ -164,8 +164,7 @@ def vAe(mode,
 
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
         self.tgt_dec = tgt_dec
-        h = self.state_in = tf.expand_dims(h, axis=0)
-        h = tf.tile(h, (rnn_layers, 1, 1))
+        h = self.state_in = tf.stack((h,)*rnn_layers)
         h, _ = _, (self.state_ex,) = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_dec, initial_state=(h,))
         if 'infer' != mode: h = tf.boolean_mask(h, msk_dec)
         h = layer_aff(h, dim_emb, name='out')
