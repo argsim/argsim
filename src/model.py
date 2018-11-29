@@ -52,10 +52,10 @@ def vAe(mode,
         dim_rep=256,
         rnn_layers=2,
         attentive=False,
-        logit_use_embed=False,
+        att_cross=True,
+        logit_use_embed=True,
         # training spec
-        drop_word=0.5,
-        accelerate=1e-4,
+        accelerate=5e-5,
         bos=2,
         eos=1):
 
@@ -67,6 +67,12 @@ def vAe(mode,
 
     assert mode in ('train', 'valid', 'infer')
     self = Record(bos=bos, eos=eos)
+
+    with scope('step'):
+        step = self.step = tf.train.get_or_create_global_step()
+        rate = accelerate * tf.to_float(step)
+        rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
+        rate_anneal = self.rate_anneal = tf.tanh(rate)
 
     with scope('tgt'):
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
@@ -94,7 +100,7 @@ def vAe(mode,
         with scope('emb_dec'): # pads one bos for the initial step
             if 'train' == mode:
                 with scope('drop_word'):
-                    tgt *= tf.to_int32(drop_word <= tf.random_uniform(tf.shape(tgt)))
+                    tgt *= tf.to_int32(tf.random_uniform(tf.shape(tgt)) < rate_keepwd)
             tgt_dec = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
             emb_dec = tf.gather(embedding, tgt_dec)
 
@@ -122,10 +128,10 @@ def vAe(mode,
         with scope('cata'):
             # extract the final states which are the outputs from the first padding steps
             idx = tf.stack((len_seq, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1) # b2
-            # forward is backward
-            fwd = tf.gather_nd(gtg, idx) # bd <- tbd, b2
-            bwd = tf.gather_nd(tgt, idx) # bd <- tbd, b2
+            fwd = tf.gather_nd(tgt, idx) # bd <- tbd, b2
+            bwd = tf.gather_nd(gtg, idx) # bd <- tbd, b2
             if attentive:
+                if att_cross: fwd, bwd = bwd, fwd
                 # the values are the outputs from all non-padding steps;
                 # the queries are the final states;
                 # padding mask: b1t <- tb <- bt
@@ -155,8 +161,8 @@ def vAe(mode,
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
         self.tgt_dec = tgt_dec
         h = self.state_in = tf.expand_dims(h, axis=0)
-        h, _ = _, (self.state_ex,) = layer_rnn(1, dim_emb, name='rnn')(emb_dec, initial_state=(h,))
-        # keep the decoder simple for now, just 1 rnn layer
+        h = tf.tile(h, (rnn_layers, 1, 1))
+        h, _ = _, (self.state_ex,) = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_dec, initial_state=(h,))
         if 'infer' != mode: h = tf.boolean_mask(h, msk_dec)
         h = layer_aff(h, dim_emb, name='out')
 
@@ -172,16 +178,15 @@ def vAe(mode,
     if 'infer' != mode:
         labels = tf.boolean_mask(tgt_enc, msk_dec, name='labels')
         with scope('acc'): acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
-        step = self.step = tf.train.get_or_create_global_step()
+
         with scope('loss'):
             with scope('loss_gen'):
                 loss_gen = self.loss_gen = tf.reduce_mean(
                     tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
             with scope('loss_kld'):
                 if 'train' == mode:
-                    anneal = self.anneal = tf.tanh(accelerate * tf.to_float(step))
-                    mu *= anneal
-                    lv *= anneal
+                    mu *= rate_anneal
+                    lv *= rate_anneal
                 loss_kld = self.loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
             loss = self.loss = loss_kld + loss_gen
 

@@ -85,7 +85,7 @@ def summ(step, model=model_valid):
         for i, j in partition(len(valid), batch_valid, discard= False))))
     wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
 
-for _ in range(4):
+for _ in range(6):
     for _ in range(100): # about 2 epochs
         for _ in tqdm(range(100), ncols= 70):
             sess.run(model_train.train_step)
