@@ -8,7 +8,7 @@ sess = tf.InteractiveSession()
 
 path_vocab = "../trial/data/vocab.model"
 path_ckpt = "../trial/ckpt"
-trial = "biatt"
+trial = "master"
 ckpt = 4
 
 
