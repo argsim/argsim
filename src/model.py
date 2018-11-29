@@ -51,7 +51,7 @@ def vAe(mode,
         dim_emb=256,
         dim_rep=256,
         rnn_layers=2,
-        attentive=True,
+        attentive=False,
         logit_use_embed=False,
         # training spec
         drop_word=0.5,
