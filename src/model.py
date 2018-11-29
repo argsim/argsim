@@ -178,9 +178,10 @@ def vAe(mode,
                 loss_gen = self.loss_gen = tf.reduce_mean(
                     tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
             with scope('loss_kld'):
-                anneal = self.anneal = tf.tanh(accelerate * tf.to_float(step))
-                mu *= anneal
-                lv *= anneal
+                if 'train' == mode:
+                    anneal = self.anneal = tf.tanh(accelerate * tf.to_float(step))
+                    mu *= anneal
+                    lv *= anneal
                 loss_kld = self.loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
             loss = self.loss = loss_kld + loss_gen
 
