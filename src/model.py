@@ -4,7 +4,6 @@ from util_tf import tf, placeholder
 
 
 init_bias = tf.zeros_initializer()
-init_embd = tf.random_uniform_initializer(-0.5, 0.5)
 init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
 init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 
@@ -91,7 +90,8 @@ def vAe(mode,
         msk_enc = tf.pad(not_eos, ((0,1),(0,0)), constant_values=False)
 
     with scope('embed'): # (t, b) -> (t, b, dim_emb)
-        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=init_embd)
+        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
+        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
         with scope('emb_enc'): # pads one eos or bos for the attention query
             tgt_enc = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
             gtg_enc = tf.pad(gtg, paddings=((0,1),(0,0)), constant_values=bos)
