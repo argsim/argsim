@@ -155,7 +155,11 @@ def vAe(mode,
         h = fwd + bwd
         mu = self.mu = layer_aff(h, dim_rep, name='mu')
         lv = self.lv = layer_aff(h, dim_rep, name='lv')
-        with scope('z'): h = self.z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
+        with scope('z'):
+            h = mu
+            if 'train' == mode:
+                h += tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
+            self.z = h
         h = layer_aff(h, dim_emb, name='ex')
 
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
