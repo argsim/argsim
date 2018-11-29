@@ -79,7 +79,7 @@ summary = tf.summary.merge(
      tf.summary.scalar('step_loss_kld', model_valid['loss_kld'])))
 
 def summ(step, model=model_valid):
-    fetches = model.acc, model.loss, model.loss_gen, model.loss_kld
+    fetches = model.acc, model.loss_gen, model.loss_kld
     results = map(np.mean, zip(*(
         sess.run(fetches, {model.tgt: valid[i:j]})
         for i, j in partition(len(valid), batch_valid, discard= False))))
