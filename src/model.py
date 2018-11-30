@@ -15,7 +15,7 @@ layer_nrm = tf.contrib.layers.layer_norm
 scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
-def attention(query, value, mask, dim, head=1):
+def attention(query, value, mask, dim, head=8):
     """computes scaled dot-product attention
 
     query : tensor f32 (b, t, d_q)
@@ -49,7 +49,7 @@ def vAe(mode,
         rnn_layers=2,
         bidirectional=True,
         bidir_stacked=True,
-        attentive=False,
+        attentive=True,
         logit_use_embed=True,
         # training spec
         accelerate=5e-5,
@@ -141,7 +141,7 @@ def vAe(mode,
                         tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
                         tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
                             tf.expand_dims(tf.transpose(msk_enc), axis=1))),
-                        dim_emb)))
+                        dim_emb), 1))
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         h = layer_aff(h, dim_emb, name='in')
