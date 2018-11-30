@@ -44,12 +44,12 @@ def vAe(mode,
         tgt=None,
         # model spec
         dim_tgt=8192,
-        dim_emb=256,
-        dim_rep=256,
+        dim_emb=512,
+        dim_rep=512,
         rnn_layers=2,
         bidirectional=True,
         bidir_stacked=True,
-        attentive=True,
+        attentive=False,
         logit_use_embed=True,
         # training spec
         accelerate=5e-5,
@@ -77,42 +77,31 @@ def vAe(mode,
         not_eos = tf.not_equal(tgt, eos)
         len_seq = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
         max_len = tf.reduce_max(len_seq)
-        # trims extra bos to make sure the lengths are right
+        # trims to make sure the lengths are right
         tgt = tgt[:max_len]
         msk_enc = not_eos[:max_len]
         msk_dec = tf.pad(msk_enc, ((1,0),(0,0)), constant_values=True)
-
-    with scope('embed'):
-        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
-        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
-        with scope('emb_enc'): # (s, b) -> (s, b, dim_emb)
-            emb_enc = tf.gather(embedding, tgt)
-        with scope('emb_dec'): # (s, b) -> (t, b, dim_emb)
-            gold = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
-            if 'train' == mode:
-                with scope('drop_word'):
-                    tgt *= tf.to_int32(tf.random_uniform(tf.shape(tgt)) < rate_keepwd)
-            fire = self.fire = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
-            emb_dec = tf.gather(embedding, fire)
-        # todo maybe remove
-        if 'train' == mode:
-            emb_enc *= tf.to_float(tf.expand_dims(msk_enc, axis=-1))
-            emb_dec *= tf.to_float(tf.expand_dims(msk_dec, axis=-1))
+        # pads for decoder : lead=[bos]+tgt -> gold=tgt+[eos]
+        lead, gold = tgt, tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
+        if 'train' == mode: lead *= tf.to_int32(tf.random_uniform(tf.shape(lead)) < rate_keepwd)
+        lead = self.lead = tf.pad(lead, paddings=((1,0),(0,0)), constant_values=bos)
 
     # s : seq length
     # t : seq length plus one padding, either eos or bos
     # b : batch size
-    # d : dimension aka dim_emb
     #
     # len_seq :  b  aka s aka t-1
     # msk_enc : sb  without padding
     # msk_dec : tb  with eos
     #
-    #    fire : tb  with bos
+    #    lead : tb  with bos
     #    gold : tb  with eos
-    #
-    # emb_enc : sbd with eos
-    # emb_dec : tbd with bos
+
+    with scope('embed'):
+        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
+        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
+        emb_dec = tf.gather(embedding, lead, name='emb_dec') # (t, b) -> (t, b, dim_emb)
+        emb_enc = tf.gather(embedding,  tgt, name='emb_enc') # (s, b) -> (s, b, dim_emb)
 
     with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
         reverse = partial(tf.reverse_sequence, seq_lengths=len_seq, seq_axis=0, batch_axis=1)
@@ -120,15 +109,15 @@ def vAe(mode,
         if bidirectional and bidir_stacked:
             for i in range(rnn_layers):
                 with scope("rnn{}".format(i+1)):
-                    tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_enc)
-                    gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_enc))
-                    hs = emb_enc = tf.concat((tgt, reverse(gtg)), axis=-1)
+                    emb_tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_enc)
+                    emb_gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_enc))
+                    hs = emb_enc = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
 
         elif bidirectional:
             with scope("rnn"):
-                tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_enc)
-                gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_enc))
-            hs = tf.concat((tgt, reverse(gtg)), axis=-1)
+                emb_tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_enc)
+                emb_gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_enc))
+            hs = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
 
         else:
             hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_enc)
@@ -219,7 +208,7 @@ def decode(sess, vae, z, steps= 256):
     s = vae.state_in.eval({vae.z: z})
     y = []
     for _ in range(steps):
-        x, s = sess.run((vae.pred, vae.state_ex), {vae.fire: x, vae.state_in: s})
+        x, s = sess.run((vae.pred, vae.state_ex), {vae.lead: x, vae.state_in: s})
         if np.all(x == vae.eos): break
         y.append(x)
     return np.concatenate(y).T
