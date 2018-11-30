@@ -41,7 +41,8 @@ def batch(size= batch_train, path= path_train, vocab= vocab, seed= seed, eos= 1)
         if size == len(bat):
             yield vpack(bat, (size, max(map(len, bat))), eos, np.int32)
             bat = []
-        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1)
+        # s = vocab.sample_encode_as_ids(raw[i], -1, 0.1)
+        s = vocab.encode_as_ids(raw[i])
         if 0 < len(s) < 256:
             bat.append(s)
 
