@@ -10,11 +10,12 @@ init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
 layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias, activation=tf.nn.relu)
 layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern, bias_initializer=init_bias)
+layer_nrm = tf.contrib.layers.layer_norm
 
 scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
-def attention(query, value, mask, dim, head=1, transform=False):
+def attention(query, value, mask, dim, head=1):
     """computes scaled dot-product attention
 
     query : tensor f32 (b, t, d_q)
@@ -22,20 +23,16 @@ def attention(query, value, mask, dim, head=1, transform=False):
      mask : tensor f32 (b, t, s)
          -> tensor f32 (b, t, dim)
 
-    transform may be omitted when `dim == d_q == d_v`
-
     `dim` must be divisible by `head`
 
     """
     assert not dim % head
-    k, v, q = value, value, query
-    if transform:
-        k = layer_aff(k, dim, name='k') # bsd key
-        v = layer_aff(v, dim, name='v') # bsd value
-        q = layer_aff(q, dim, name='q') # btd query
+    k = layer_aff(value, dim, name='k') # bsd
+    v = layer_aff(value, dim, name='v') # bsd
+    q = layer_aff(query, dim, name='q') # btd
     if 1 < head: k, v, q = map(lambda x: tf.stack(tf.split(x, head, -1)), (k, v, q))
-    a = tf.nn.softmax(
-        tf.matmul(q, k, transpose_b=True) # weight: bts <- btd @ (bds <- bsd)
+    a = tf.nn.softmax( # weight
+        tf.matmul(q, k, transpose_b=True) # bts <- btd @ (bds <- bsd)
         * ((dim // head) ** -0.5) # scale by sqrt d
         + mask # 0 for true, -inf for false
     ) @ v # attend: btd <- bts @ bsd
@@ -53,7 +50,6 @@ def vAe(mode,
         bidirectional=True,
         bidir_stacked=True,
         attentive=False,
-        att_cross=True,
         logit_use_embed=True,
         # training spec
         accelerate=5e-5,
@@ -139,14 +135,13 @@ def vAe(mode,
             if attentive:
                 # the values are the outputs from all non-padding steps;
                 # the queries are the final states;
-                if att_cross: h = tf.concat(tf.split(h, 2, -1)[::-1], -1)
-                h = tf.squeeze( # bd <- b1d
+                h = layer_nrm(h + tf.squeeze( # bd <- b1d
                     attention( # b1d <- b1d, bsd, b1s
                         tf.expand_dims(h, axis=1), # query: b1d <- bd
                         tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
                         tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
                             tf.expand_dims(tf.transpose(msk_enc), axis=1))),
-                        dim_emb))
+                        dim_emb)))
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         h = layer_aff(h, dim_emb, name='in')
@@ -199,23 +194,21 @@ def vAe(mode,
 
 
 def encode(sess, vae, tgt):
-    """returns latent state parameters `mu` and `lv` given `tgt`
+    """returns latent states
 
+    ->    array f32 (b, dim_rep)
     tgt : array i32 (b, t)
-     mu : array f32 (b, dim_rep)
-     lv : array f32 (b, dim_rep)
 
     """
-    return sess.run((vae.mu, vae.lv), {vae.tgt: tgt})
+    return sess.run(vae.z, {vae.tgt: tgt})
 
 
 def decode(sess, vae, z, steps= 256):
-    """-> array i32 (b, t)
+    """decodes latent states
 
-    z :  array f32 (b, dim_rep)
+    ->   array i32 (b, t)
+    z  : array f32 (b, dim_rep)
     t <= steps
-
-    decodes latent states
 
     """
     x = np.full((1, len(z)), vae.bos, dtype=np.int32)
@@ -226,15 +219,3 @@ def decode(sess, vae, z, steps= 256):
         if np.all(x == vae.eos): break
         y.append(x)
     return np.concatenate(y).T
-
-
-def sample(mu, lv, size):
-    """-> array f32 (size, dim_rep)
-
-    mu : array f32 dim_rep
-    lv : array f32 dim_rep
-
-    samples latent states given mean `mu` and log variance `lv`
-
-    """
-    return mu + np.exp(0.5 * lv) * np.random.randn(size, len(lv))
