@@ -86,7 +86,7 @@ def vAe(mode,
         b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
         embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
         with scope('emb_enc'): # (s, b) -> (s, b, dim_emb)
-            emb_tgt = tf.gather(embedding, tgt)
+            emb_enc = tf.gather(embedding, tgt)
         with scope('emb_dec'): # (s, b) -> (t, b, dim_emb)
             gold = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
             if 'train' == mode:
@@ -94,6 +94,10 @@ def vAe(mode,
                     tgt *= tf.to_int32(tf.random_uniform(tf.shape(tgt)) < rate_keepwd)
             fire = self.fire = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
             emb_dec = tf.gather(embedding, fire)
+        # todo maybe remove
+        if 'train' == mode:
+            emb_enc *= tf.to_float(tf.expand_dims(msk_enc, axis=-1))
+            emb_dec *= tf.to_float(tf.expand_dims(msk_dec, axis=-1))
 
     # s : seq length
     # t : seq length plus one padding, either eos or bos
@@ -107,7 +111,7 @@ def vAe(mode,
     #    fire : tb  with bos
     #    gold : tb  with eos
     #
-    # emb_tgt : tbd with eos
+    # emb_enc : sbd with eos
     # emb_dec : tbd with bos
 
     with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
@@ -116,18 +120,18 @@ def vAe(mode,
         if bidirectional and bidir_stacked:
             for i in range(rnn_layers):
                 with scope("rnn{}".format(i+1)):
-                    tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_tgt)
-                    gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_tgt))
-                    hs = emb_tgt = tf.concat((tgt, reverse(gtg)), axis=-1)
+                    tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_enc)
+                    gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_enc))
+                    hs = emb_enc = tf.concat((tgt, reverse(gtg)), axis=-1)
 
         elif bidirectional:
             with scope("rnn"):
-                tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_tgt)
-                gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_tgt))
+                tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_enc)
+                gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_enc))
             hs = tf.concat((tgt, reverse(gtg)), axis=-1)
 
         else:
-            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_tgt)
+            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_enc)
 
         with scope('cata'):
             # extract the final states from the outputs: bd <- sbd, b2
