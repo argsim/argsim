@@ -4,7 +4,7 @@ import sys, os
 if 1 == len(sys.argv): ckpt = None
 if 2 == len(sys.argv): ckpt = sys.argv[1]
 if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "master"
+trial = "dev"
 
 from os.path import expanduser
 path_vocab = "../trial/data/vocab.model"

@@ -50,6 +50,8 @@ def vAe(mode,
         dim_emb=256,
         dim_rep=256,
         rnn_layers=2,
+        bidirectional=True,
+        bidir_stacked=True,
         attentive=False,
         att_cross=True,
         logit_use_embed=True,
@@ -83,16 +85,12 @@ def vAe(mode,
         tgt = tgt[:max_len]
         msk_enc = not_eos[:max_len]
         msk_dec = tf.pad(msk_enc, ((1,0),(0,0)), constant_values=True)
-        # tgt reversed and having eos replaced with bos
-        gtg = tf.reverse_sequence(tgt, len_seq, seq_axis=0, batch_axis=1)
-        gtg = tf.where(msk_enc, gtg, tf.fill(tf.shape(gtg), bos))
 
     with scope('embed'):
         b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
         embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
         with scope('emb_enc'): # (s, b) -> (s, b, dim_emb)
             emb_tgt = tf.gather(embedding, tgt)
-            emb_gtg = tf.gather(embedding, gtg)
         with scope('emb_dec'): # (s, b) -> (t, b, dim_emb)
             gold = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
             if 'train' == mode:
@@ -114,42 +112,44 @@ def vAe(mode,
     #    gold : tb  with eos
     #
     # emb_tgt : tbd with eos
-    # emb_gtg : tbd with bos
     # emb_dec : tbd with bos
 
     with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
-        # bidirectional won't work correctly without length mask which cudnn doesn't take;
-        # stick to unidirectional for now;
-        tgt, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_fwd')(emb_tgt) # sbd
-        gtg, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_bwd')(emb_gtg) # sbd
+        reverse = partial(tf.reverse_sequence, seq_lengths=len_seq, seq_axis=0, batch_axis=1)
+
+        if bidirectional and bidir_stacked:
+            for i in range(rnn_layers):
+                with scope("rnn{}".format(i+1)):
+                    tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_tgt)
+                    gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_tgt))
+                    hs = emb_tgt = tf.concat((tgt, reverse(gtg)), axis=-1)
+
+        elif bidirectional:
+            with scope("rnn"):
+                tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_tgt)
+                gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_tgt))
+            hs = tf.concat((tgt, reverse(gtg)), axis=-1)
+
+        else:
+            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_tgt)
+
         with scope('cata'):
-            # extract the final states from the outputs
-            idx = tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1) # b2
-            fwd = tf.gather_nd(tgt, idx) # bd <- sbd, b2
-            bwd = tf.gather_nd(gtg, idx) # bd <- sbd, b2
+            # extract the final states from the outputs: bd <- sbd, b2
+            h = tf.gather_nd(hs, tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1))
             if attentive:
-                if att_cross: fwd, bwd = bwd, fwd
                 # the values are the outputs from all non-padding steps;
                 # the queries are the final states;
-                # padding mask: b1s <- sb <- bs
-                msk = tf.log(tf.to_float(tf.expand_dims(tf.transpose(msk_enc), axis=1)))
-                # query: b1d <- bd
-                fwd = tf.expand_dims(fwd, axis=1)
-                bwd = tf.expand_dims(bwd, axis=1)
-                # value: bsd <- sbd
-                tgt = tf.transpose(tgt, (1,0,2))
-                gtg = tf.transpose(gtg, (1,0,2))
-                # attend: b1d <- b1d, bsd, b1s
-                with scope('fwd'): fwd = attention(fwd, tgt, msk, dim_emb)
-                with scope('bwd'): bwd = attention(bwd, gtg, msk, dim_emb)
-                # bd <- b1d
-                fwd = tf.squeeze(fwd, axis=1)
-                bwd = tf.squeeze(bwd, axis=1)
+                if att_cross: h = tf.concat(tf.split(h, 2, -1)[::-1], -1)
+                h = tf.squeeze( # bd <- b1d
+                    attention( # b1d <- b1d, bsd, b1s
+                        tf.expand_dims(h, axis=1), # query: b1d <- bd
+                        tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
+                        tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
+                            tf.expand_dims(tf.transpose(msk_enc), axis=1))),
+                        dim_emb))
 
-    with scope('latent'): # (b, dim_emb), (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        fwd = layer_aff(fwd, dim_emb, name='in_fwd')
-        bwd = layer_aff(bwd, dim_emb, name='in_bwd')
-        h = fwd + bwd
+    with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
+        h = layer_aff(h, dim_emb, name='in')
         mu = self.mu = layer_aff(h, dim_rep, name='mu')
         lv = self.lv = layer_aff(h, dim_rep, name='lv')
         with scope('z'):
