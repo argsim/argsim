@@ -1,137 +1,240 @@
-from util import identity, partial
+from util import identity, partial, Record
+from util_np import np
 from util_tf import tf, placeholder
 
 
-# init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
-init_kern = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 init_bias = tf.zeros_initializer()
+init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
+init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 
 layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
-layer_act = partial(layer_aff, activation=tf.nn.relu)
-rnn_cell = partial(tf.nn.rnn_cell.GRUCell, activation=tf.nn.relu, kernel_initializer=init_kern, bias_initializer=init_bias)
+layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias, activation=tf.nn.relu)
+layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern, bias_initializer=init_bias)
+
+scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
-def vAe(tgt,
+def attention(query, value, mask, dim, head=1, transform=False):
+    """computes scaled dot-product attention
+
+    query : tensor f32 (b, t, d_q)
+    value : tensor f32 (b, s, d_v)
+     mask : tensor f32 (b, t, s)
+         -> tensor f32 (b, t, dim)
+
+    transform may be omitted when `dim == d_q == d_v`
+
+    `dim` must be divisible by `head`
+
+    """
+    assert not dim % head
+    k, v, q = value, value, query
+    if transform:
+        k = layer_aff(k, dim, name='k') # bsd key
+        v = layer_aff(v, dim, name='v') # bsd value
+        q = layer_aff(q, dim, name='q') # btd query
+    if 1 < head: k, v, q = map(lambda x: tf.stack(tf.split(x, head, -1)), (k, v, q))
+    a = tf.nn.softmax(
+        tf.matmul(q, k, transpose_b=True) # weight: bts <- btd @ (bds <- bsd)
+        * ((dim // head) ** -0.5) # scale by sqrt d
+        + mask # 0 for true, -inf for false
+    ) @ v # attend: btd <- bts @ bsd
+    if 1 < head: a = tf.concat(tf.unstack(a), -1)
+    return a
+
+
+def vAe(mode,
+        tgt=None,
         # model spec
         dim_tgt=8192,
         dim_emb=256,
         dim_rep=256,
         rnn_layers=2,
-        logit_use_embed=False,
+        attentive=False,
+        att_cross=True,
+        logit_use_embed=True,
         # training spec
-        keep_word=0.5,
-        keep_prob=0.9,
-        warmup=1e4,
-        accelerate=1e-4,
+        accelerate=5e-5,
+        bos=2,
         eos=1):
-    # tgt : int32 (b, t)  | batchsize, timestep
+
     # dim_tgt : vocab size
     # dim_emb : model dimension
     # dim_rep : representation dimension
+    #
+    # unk=0 for word dropout
 
-    tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
-    keep_word = placeholder(tf.float32, (), keep_word, 'keep_word')
-    keep_prob = placeholder(tf.float32, (), keep_prob, 'keep_prob')
+    assert mode in ('train', 'valid', 'infer')
+    self = Record(bos=bos, eos=eos)
 
-    dropout = partial(tf.nn.dropout, keep_prob=keep_prob)
-    rnn_dropout = lambda cell, input_size=dim_emb: tf.nn.rnn_cell.DropoutWrapper(
-        cell=cell,
-        input_keep_prob=keep_prob,
-        output_keep_prob=keep_prob,
-        state_keep_prob=keep_prob,
-        variational_recurrent=True,
-        input_size=input_size,
-        dtype=tf.float32)
+    with scope('step'):
+        step = self.step = tf.train.get_or_create_global_step()
+        rate = accelerate * tf.to_float(step)
+        rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
+        rate_anneal = self.rate_anneal = tf.tanh(rate)
 
-    # disable dropout for now
-    dropout = identity
-    rnn_dropout = lambda cell, input_size=dim_emb: cell
+    with scope('tgt'):
+        tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
+        tgt = tf.transpose(tgt) # time major order
+        not_eos = tf.not_equal(tgt, eos)
+        len_seq = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
+        max_len = tf.reduce_max(len_seq)
+        # trims extra bos to make sure the lengths are right
+        tgt = tgt[:max_len]
+        msk_enc = not_eos[:max_len]
+        msk_dec = tf.pad(msk_enc, ((1,0),(0,0)), constant_values=True)
+        # tgt reversed and having eos replaced with bos
+        gtg = tf.reverse_sequence(tgt, len_seq, seq_axis=0, batch_axis=1)
+        gtg = tf.where(msk_enc, gtg, tf.fill(tf.shape(gtg), bos))
 
-    with tf.variable_scope('input'):
-        with tf.variable_scope('length'):
-            length = tf.reduce_sum(tf.to_int32(tf.not_equal(tgt, eos)), -1)
-            maxlen = tf.reduce_max(length)
-        with tf.variable_scope('mask'):
-            mask = tf.sequence_mask(length, maxlen=maxlen)
-        with tf.variable_scope('gold'):
-            labels = tf.boolean_mask(tgt[:,1:maxlen+1], mask)
-        with tf.variable_scope('tgt_dec'):
-            tgt_dec = tgt[:,:maxlen]
-        with tf.variable_scope('tgt_enc'):
-            tgt_enc = tgt[:,1:maxlen]
+    with scope('embed'):
+        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
+        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
+        with scope('emb_enc'): # (s, b) -> (s, b, dim_emb)
+            emb_tgt = tf.gather(embedding, tgt)
+            emb_gtg = tf.gather(embedding, gtg)
+        with scope('emb_dec'): # (s, b) -> (t, b, dim_emb)
+            gold = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
+            if 'train' == mode:
+                with scope('drop_word'):
+                    tgt *= tf.to_int32(tf.random_uniform(tf.shape(tgt)) < rate_keepwd)
+            fire = self.fire = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
+            emb_dec = tf.gather(embedding, fire)
 
-    with tf.variable_scope('embed'):
-        # (b, t) -> (b, t, dim_emb)
-        embed_mtrx = tf.get_variable(name="embed_mtrx", shape=[dim_tgt, dim_emb], initializer=init_kern)
-        embed_enc = tf.gather(embed_mtrx, tgt_enc)
-        embed_dec = tf.gather(embed_mtrx, tgt_dec * tf.to_int32(tf.random_uniform(tf.shape(tgt_dec)) < keep_word))
+    # s : seq length
+    # t : seq length plus one padding, either eos or bos
+    # b : batch size
+    # d : dimension aka dim_emb
+    #
+    # len_seq :  b  aka s aka t-1
+    # msk_enc : sb  without padding
+    # msk_dec : tb  with eos
+    #
+    #    fire : tb  with bos
+    #    gold : tb  with eos
+    #
+    # emb_tgt : tbd with eos
+    # emb_gtg : tbd with bos
+    # emb_dec : tbd with bos
 
-    with tf.variable_scope('encode'):
-        # (b, t, dim_emb) -> (b, dim_emb)
-        _, h_fw, h_bw = tf.contrib.rnn.stack_bidirectional_dynamic_rnn(
-            cells_fw=[rnn_dropout(rnn_cell(dim_emb), dim_emb*(1+i)) for i in range(rnn_layers)],
-            cells_bw=[rnn_dropout(rnn_cell(dim_emb), dim_emb*(1+i)) for i in range(rnn_layers)],
-            inputs=embed_enc,
-            sequence_length=length,
-            dtype=tf.float32)
-        h = tf.concat((h_fw[-1], h_bw[-1]), -1)
+    with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
+        # bidirectional won't work correctly without length mask which cudnn doesn't take;
+        # stick to unidirectional for now;
+        tgt, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_fwd')(emb_tgt) # sbd
+        gtg, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_bwd')(emb_gtg) # sbd
+        with scope('cata'):
+            # extract the final states from the outputs
+            idx = tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1) # b2
+            fwd = tf.gather_nd(tgt, idx) # bd <- sbd, b2
+            bwd = tf.gather_nd(gtg, idx) # bd <- sbd, b2
+            if attentive:
+                if att_cross: fwd, bwd = bwd, fwd
+                # the values are the outputs from all non-padding steps;
+                # the queries are the final states;
+                # padding mask: b1s <- sb <- bs
+                msk = tf.log(tf.to_float(tf.expand_dims(tf.transpose(msk_enc), axis=1)))
+                # query: b1d <- bd
+                fwd = tf.expand_dims(fwd, axis=1)
+                bwd = tf.expand_dims(bwd, axis=1)
+                # value: bsd <- sbd
+                tgt = tf.transpose(tgt, (1,0,2))
+                gtg = tf.transpose(gtg, (1,0,2))
+                # attend: b1d <- b1d, bsd, b1s
+                with scope('fwd'): fwd = attention(fwd, tgt, msk, dim_emb)
+                with scope('bwd'): bwd = attention(bwd, gtg, msk, dim_emb)
+                # bd <- b1d
+                fwd = tf.squeeze(fwd, axis=1)
+                bwd = tf.squeeze(bwd, axis=1)
 
-    with tf.variable_scope('latent'):
-        # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        h = layer_act(h, dim_emb, name='in1')
-        h = layer_act(h, dim_emb, name='in2')
-        mu = layer_aff(h, dim_rep, name='mu')
-        lv = layer_aff(h, dim_rep, name='lv')
-        with tf.name_scope('z'):
-            h = z = mu + tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
-        h = layer_act(h, dim_emb, name='ex1')
-        h = layer_act(h, dim_emb, name='ex2')
+    with scope('latent'): # (b, dim_emb), (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
+        fwd = layer_aff(fwd, dim_emb, name='in_fwd')
+        bwd = layer_aff(bwd, dim_emb, name='in_bwd')
+        h = fwd + bwd
+        mu = self.mu = layer_aff(h, dim_rep, name='mu')
+        lv = self.lv = layer_aff(h, dim_rep, name='lv')
+        with scope('z'):
+            h = mu
+            if 'train' == mode:
+                h += tf.exp(0.5 * lv) * tf.random_normal(shape=tf.shape(lv))
+            self.z = h
+        h = layer_aff(h, dim_emb, name='ex')
 
-    with tf.variable_scope('decode'):
-        # (b, dim_emb) -> (b, t, dim_emb) -> (?, dim_emb)
-        h, _ = tf.nn.dynamic_rnn(rnn_dropout(rnn_cell(dim_emb)), embed_dec, initial_state=h, sequence_length=length)
-        # # keep decoder simple for now
-        # stacked_cells = tf.nn.rnn_cell.MultiRNNCell([rnn_dropout(rnn_cell(dim_emb)) for _ in range(rnn_layers)])
-        # initial_state = tuple(h for _ in range(rnn_layers))
-        # h, _ = tf.nn.dynamic_rnn(stacked_cells, embed_dec, initial_state=initial_state, sequence_length=length)
-        h = tf.boolean_mask(h, mask)
-        h = dropout(layer_act(h, dim_emb, name='out1'))
-        h = dropout(layer_act(h, dim_emb, name='out2'))
+    with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
+        h = self.state_in = tf.stack((h,)*rnn_layers)
+        h, _ = _, (self.state_ex,) = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_dec, initial_state=(h,))
+        if 'infer' != mode: h = tf.boolean_mask(h, msk_dec)
+        h = layer_aff(h, dim_emb, name='out')
 
-    # (?, dim_emb) -> (?, dim_tgt)
-    if logit_use_embed:
-        logits = tf.matmul(h, embed_mtrx, transpose_b=True, name='logit')
-    else:
-        logits = layer_aff(h, dim_tgt, name='logit')
+    with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
+        if logit_use_embed:
+            logits = self.logits = tf.tensordot(h, (dim_emb ** -0.5) * tf.transpose(embedding), 1)
+        else:
+            logits = self.logits = layer_aff(h, dim_tgt)
 
-    with tf.variable_scope('prob'):
-        prob = tf.nn.softmax(logits)
+    with scope('prob'): prob = self.prob = tf.nn.softmax(logits)
+    with scope('pred'): pred = self.pred = tf.argmax(logits, -1, output_type=tf.int32)
 
-    with tf.variable_scope('pred'):
-        pred = tf.argmax(logits, -1, output_type=tf.int32)
+    if 'infer' != mode:
+        labels = tf.boolean_mask(gold, msk_dec, name='labels')
+        with scope('acc'): acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
 
-    with tf.variable_scope('acc'):
-        acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
+        with scope('loss'):
+            with scope('loss_gen'):
+                loss_gen = self.loss_gen = tf.reduce_mean(
+                    tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+            with scope('loss_kld'):
+                loss_kld = tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
+                if 'train' == mode:
+                    loss_kld *= 0.5 * rate_anneal
+                else:
+                    loss_kld *= 0.5
+                self.loss_kld = loss_kld
+            loss = self.loss = loss_kld + loss_gen
 
-    with tf.variable_scope('loss'):
-        step = tf.train.get_or_create_global_step()
-        with tf.name_scope('loss_gen'):
-            loss_gen = tf.reduce_mean(
-                tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
-        with tf.name_scope('loss_kld'):
-            loss_kld = 0.5 * tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
-        with tf.name_scope('balance'):
-            balance = tf.nn.relu(tf.tanh(accelerate * (tf.to_float(step) - warmup)))
-        loss = balance * loss_kld + loss_gen
-    train_step = tf.train.AdamOptimizer().minimize(loss, step)
+    if 'train' == mode:
+        with scope('train'):
+            train_step = self.train_step = tf.train.AdamOptimizer().minimize(loss, step)
 
-    return dict(
-        tgt=tgt, keep_word=keep_word, keep_prob=keep_prob,
-        mu=mu, lv=lv,
-        logits=logits, prob=prob, pred=pred, acc=acc,
-        step=step,
-        loss=loss,
-        loss_gen=loss_gen,
-        loss_kld=loss_kld,
-        balance=balance,
-        train_step=train_step)
+    return self
+
+
+def encode(sess, vae, tgt):
+    """returns latent state parameters `mu` and `lv` given `tgt`
+
+    tgt : array i32 (b, t)
+     mu : array f32 (b, dim_rep)
+     lv : array f32 (b, dim_rep)
+
+    """
+    return sess.run((vae.mu, vae.lv), {vae.tgt: tgt})
+
+
+def decode(sess, vae, z, steps= 256):
+    """-> array i32 (b, t)
+
+    z :  array f32 (b, dim_rep)
+    t <= steps
+
+    decodes latent states
+
+    """
+    x = np.full((1, len(z)), vae.bos, dtype=np.int32)
+    s = vae.state_in.eval({vae.z: z})
+    y = []
+    for _ in range(steps):
+        x, s = sess.run((vae.pred, vae.state_ex), {vae.fire: x, vae.state_in: s})
+        if np.all(x == vae.eos): break
+        y.append(x)
+    return np.concatenate(y).T
+
+
+def sample(mu, lv, size):
+    """-> array f32 (size, dim_rep)
+
+    mu : array f32 dim_rep
+    lv : array f32 dim_rep
+
+    samples latent states given mean `mu` and log variance `lv`
+
+    """
+    return mu + np.exp(0.5 * lv) * np.random.randn(size, len(lv))

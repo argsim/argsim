@@ -2,7 +2,7 @@ from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 from util_np import np, vpack
 
 
-def load_spm(path, options= "bos:eos"):
+def load_spm(path):
     """-> SentencePieceProcessor
 
     loads a sentence piece model.
@@ -10,9 +10,6 @@ def load_spm(path, options= "bos:eos"):
     """
     spm = SentencePieceProcessor()
     spm.load(path)
-    if options:
-        spm.set_encode_extra_options(options)
-        spm.set_decode_extra_options(options)
     return spm
 
 
