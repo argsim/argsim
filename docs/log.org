@@ -84,15 +84,6 @@ presumably due to having more relu units dying out.
 adding relu layers always made the model worse.
 the cause is unclear.
 
-changing decoder and latent at the same time always makes it difficult to judge.
-decoder getting more powerful is not necessarily good,
-but we do want latent to get better.
-
-todo
-- add relu layers to latent
-- if that works, add relu to decode
-- if that works, try relu rnn with attention
-
 * stacked bidirectional grus
 
 the =cudnn= implementations do not support variable lengthed sequences at the moment,
