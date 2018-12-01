@@ -197,7 +197,7 @@ def encode(sess, vae, tgt):
     return sess.run(vae.z, {vae.tgt: tgt})
 
 
-def decode(sess, vae, z, steps= 256):
+def decode(sess, vae, z, steps=256):
     """decodes latent states
 
     ->   array i32 (b, t)

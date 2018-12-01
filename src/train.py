@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
-import sys, os
-if 1 == len(sys.argv): ckpt = None
-if 2 == len(sys.argv): ckpt = sys.argv[1]
-if 3 <= len(sys.argv): sys.exit("wrong args")
-trial = "dev"
+ckpt  = "master3"
+trial = "kudo"
 
-from os.path import expanduser
 path_vocab = "../trial/data/vocab.model"
 path_train = "../trial/data/train.txt"
 path_valid = "../trial/data/valid.npy"
@@ -16,8 +12,6 @@ path_log = "~/cache/tensorboard-logdir/argsim"
 seed = 0
 batch_train = 128
 batch_valid = 512
-# batch_train = 64
-# batch_valid = 256
 
 from model import vAe as vae
 from tqdm import tqdm
@@ -41,8 +35,8 @@ def batch(size= batch_train, path= path_train, vocab= vocab, seed= seed, eos= 1)
         if size == len(bat):
             yield vpack(bat, (size, max(map(len, bat))), eos, np.int32)
             bat = []
-        # s = vocab.sample_encode_as_ids(raw[i], -1, 0.1)
-        s = vocab.encode_as_ids(raw[i])
+        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1)
+        # s = vocab.encode_as_ids(raw[i])
         if 0 < len(s) < 256:
             bat.append(s)
 
@@ -69,7 +63,7 @@ model_train = vae('train', tgt=tgt)
 sess = tf.InteractiveSession()
 saver = tf.train.Saver()
 if ckpt:
-    saver.restore(sess, pform(path_ckpt, trial, ckpt))
+    saver.restore(sess, pform(path_ckpt, ckpt))
 else:
     tf.global_variables_initializer().run()
 
