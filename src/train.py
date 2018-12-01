@@ -14,7 +14,7 @@ path_ckpt = "../trial/ckpt"
 path_log = "~/cache/tensorboard-logdir/argsim"
 
 seed = 0
-batch_train = 256
+batch_train = 128
 batch_valid = 512
 # batch_train = 64
 # batch_valid = 256
@@ -87,7 +87,7 @@ def summ(step, model=model_valid):
     wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
 
 for _ in range(6):
-    for _ in range(100): # about 2 epochs
+    for _ in range(100): # about 1 epoch
         for _ in tqdm(range(100), ncols= 70):
             sess.run(model_train.train_step)
         step = sess.run(model_train.step)

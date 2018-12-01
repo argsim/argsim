@@ -52,7 +52,7 @@ def vAe(mode,
         attentive=False,
         logit_use_embed=True,
         # training spec
-        accelerate=5e-5,
+        accelerate=1e-4,
         bos=2,
         eos=1):
 
@@ -70,6 +70,7 @@ def vAe(mode,
         rate = accelerate * tf.to_float(step)
         rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
         rate_anneal = self.rate_anneal = tf.tanh(rate)
+        rate_update = self.rate_update = tf.reciprocal(1.0 + rate) * 1e-3
 
     with scope('tgt'):
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
@@ -137,7 +138,7 @@ def vAe(mode,
                         dim_emb), 1))
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        h = layer_aff(h, dim_emb, name='in')
+        # h = layer_aff(h, dim_emb, name='in')
         mu = self.mu = layer_aff(h, dim_rep, name='mu')
         lv = self.lv = layer_aff(h, dim_rep, name='lv')
         with scope('z'):
@@ -181,7 +182,7 @@ def vAe(mode,
 
     if 'train' == mode:
         with scope('train'):
-            train_step = self.train_step = tf.train.AdamOptimizer().minimize(loss, step)
+            train_step = self.train_step = tf.train.AdamOptimizer(rate_update).minimize(loss, step)
 
     return self
 
