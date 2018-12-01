@@ -1,18 +1,18 @@
-from util import identity, partial, Record
+from util import partial, Record
 from util_np import np
 from util_tf import tf, placeholder
 
+
+scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 init_bias = tf.zeros_initializer()
 init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
 init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 
+layer_nrm = tf.contrib.layers.layer_norm
 layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
 layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias, activation=tf.nn.relu)
 layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern, bias_initializer=init_bias)
-layer_nrm = tf.contrib.layers.layer_norm
-
-scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 
 def attention(query, value, mask, dim, head=8):
