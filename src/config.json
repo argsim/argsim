@@ -1,0 +1,29 @@
+{
+    "paths": {
+        "log": "~/cache/tensorboard-logdir/argsim"
+        , "vocab": "../trial/data/vocab.model"
+        , "train": "../trial/data/train.txt"
+        , "valid": "../trial/data/valid.npy"
+        , "ckpt": "../trial/ckpt"
+    }
+    ,
+    "model": {
+        "accelerate": 1e-4
+        , "dim_tgt": 8192
+        , "dim_emb": 512
+        , "dim_rep": 1024
+        , "rnn_layers": 3
+        , "bidirectional": true
+        , "bidir_stacked": true
+        , "attentive": false
+        , "logit_use_embed": true
+    }
+    ,
+    "train": {
+        "seed": 0
+        , "max_len": 256
+        , "batch_train": 128
+        , "batch_valid": 512
+        , "total_valid": 4096
+    }
+}

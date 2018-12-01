@@ -1,5 +1,6 @@
 from os.path import expanduser, join
 from util import Record
+import json
 import pickle
 
 
@@ -31,3 +32,8 @@ def save_pkl(filename, obj):
     "saves to pickle file."
     with open(filename, 'wb') as dump:
         pickle.dump(obj, dump)
+
+
+def load_json(filename):
+    with open(filename) as file:
+        return json.load(file)
