@@ -5,7 +5,6 @@
   + gru
   + attention
 - latent
-  + affine in
   + affine mu
   + affine lv
   + affine ex
@@ -13,6 +12,21 @@
   + gru
   + affine out
 - logit
+
+* training schedule
+
+the schedule is determined by =accelerate= and the training step.
+currently the scheduling =rate= increases by 1 per 10k steps,
+which determines the keep word rate =keepwd=, the kld annealing rate =anneal=, and the learning rate =update=.
+
+| rate | keepwd | anneal | update |
+|------+--------+--------+--------|
+|    0 |  50.00 |   0.00 |  0.100 |
+|    1 |  73.11 |  76.16 |  0.050 |
+|    2 |  88.08 |  96.40 |  0.033 |
+|    3 |  95.26 |  99.51 |  0.025 |
+|    4 |  98.20 |  99.93 |  0.020 |
+|    5 |  99.33 |  99.99 |  0.017 |
 
 * dropout
 
@@ -83,6 +97,11 @@ presumably due to having more relu units dying out.
 
 adding relu layers always made the model worse.
 the cause is unclear.
+
+the model is also very sensitive to where the affine layers are.
+omitting =ex= or =out=
+or adding an affine layer in latent into =mu= and =lv=
+all makes the model worse.
 
 * stacked bidirectional grus
 

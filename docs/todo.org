@@ -1,5 +1,0 @@
-* clustering
-
-- reason dataset -> arguments (plain text), labels
-- l1 logistic classifier
-- clustering
