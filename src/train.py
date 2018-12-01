@@ -50,7 +50,7 @@ tf.set_random_seed(T.seed)
 vocab = load_spm(P.vocab)
 valid = np.load(P.valid)
 
-def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=T.seed, sample=A.sample, max_len=T.max_len):
+def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=T.seed, kudo=A.sample, max_len=T.max_len):
     raw = tuple(load_txt(path))
     eos = vocab.eos_id()
     bat = []
@@ -58,7 +58,7 @@ def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=T.seed, sample=A.s
         if size == len(bat):
             yield vpack(bat, (size, max(map(len, bat))), eos, np.int32)
             bat = []
-        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1) if sample else \
+        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1) if kudo else \
             vocab.encode_as_ids(raw[i])
         if 0 < len(s) < max_len:
             bat.append(s)
