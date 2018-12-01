@@ -1,10 +1,12 @@
 import os
+import numpy as np
 
 ############################################
 ### Processes and saves the Test Dataset ###
 ############################################
 
 datadir = '../data/reason/reason'
+
 labels, arguments = [], []
 
 for dirs, subdirs, files in os.walk(datadir):
@@ -23,7 +25,7 @@ for dirs, subdirs, files in os.walk(datadir):
                 if sentence[:7] == "Label##":
                     count = 1
                     try:
-                        while text[idx+count][:7] != "Label##":
+                        while text[idx+count][:6] == "Line##":
                             labels.append(text[idx][7:])
                             arguments.append(text[idx+count][6:])
                             count += 1
@@ -32,7 +34,7 @@ for dirs, subdirs, files in os.walk(datadir):
 
 # save the data
 data = "\n".join(arguments)
-file = open('../data/test_data.txt', 'w')
+file = open('..argsim/data/test_data.txt', 'w')
 file.write(data)
 file.close()
 np.save("..argsim/data/test_labels.npy", np.asarray(labels))
