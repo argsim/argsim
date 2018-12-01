@@ -1,20 +1,21 @@
-from util import identity, partial, Record
+from util import partial, Record
 from util_np import np
 from util_tf import tf, placeholder
 
+
+scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
 init_bias = tf.zeros_initializer()
 init_kern = tf.variance_scaling_initializer(1.0, 'fan_avg', 'uniform')
 init_relu = tf.variance_scaling_initializer(2.0, 'fan_avg', 'uniform')
 
+layer_nrm = tf.contrib.layers.layer_norm
 layer_aff = partial(tf.layers.dense, kernel_initializer=init_kern, bias_initializer=init_bias)
 layer_act = partial(tf.layers.dense, kernel_initializer=init_relu, bias_initializer=init_bias, activation=tf.nn.relu)
 layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern, bias_initializer=init_bias)
 
-scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
 
-
-def attention(query, value, mask, dim, head=1, transform=False):
+def attention(query, value, mask, dim, head=8):
     """computes scaled dot-product attention
 
     query : tensor f32 (b, t, d_q)
@@ -22,20 +23,16 @@ def attention(query, value, mask, dim, head=1, transform=False):
      mask : tensor f32 (b, t, s)
          -> tensor f32 (b, t, dim)
 
-    transform may be omitted when `dim == d_q == d_v`
-
     `dim` must be divisible by `head`
 
     """
     assert not dim % head
-    k, v, q = value, value, query
-    if transform:
-        k = layer_aff(k, dim, name='k') # bsd key
-        v = layer_aff(v, dim, name='v') # bsd value
-        q = layer_aff(q, dim, name='q') # btd query
+    k = layer_aff(value, dim, name='k') # bsd
+    v = layer_aff(value, dim, name='v') # bsd
+    q = layer_aff(query, dim, name='q') # btd
     if 1 < head: k, v, q = map(lambda x: tf.stack(tf.split(x, head, -1)), (k, v, q))
-    a = tf.nn.softmax(
-        tf.matmul(q, k, transpose_b=True) # weight: bts <- btd @ (bds <- bsd)
+    a = tf.nn.softmax( # weight
+        tf.matmul(q, k, transpose_b=True) # bts <- btd @ (bds <- bsd)
         * ((dim // head) ** -0.5) # scale by sqrt d
         + mask # 0 for true, -inf for false
     ) @ v # attend: btd <- bts @ bsd
@@ -47,14 +44,15 @@ def vAe(mode,
         tgt=None,
         # model spec
         dim_tgt=8192,
-        dim_emb=256,
-        dim_rep=256,
-        rnn_layers=2,
+        dim_emb=512,
+        dim_rep=1024,
+        rnn_layers=3,
+        bidirectional=True,
+        bidir_stacked=True,
         attentive=False,
-        att_cross=True,
         logit_use_embed=True,
         # training spec
-        accelerate=5e-5,
+        accelerate=1e-4,
         bos=2,
         eos=1):
 
@@ -72,6 +70,7 @@ def vAe(mode,
         rate = accelerate * tf.to_float(step)
         rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
         rate_anneal = self.rate_anneal = tf.tanh(rate)
+        rate_update = self.rate_update = tf.reciprocal(1.0 + rate) * 1e-3
 
     with scope('tgt'):
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
@@ -79,77 +78,67 @@ def vAe(mode,
         not_eos = tf.not_equal(tgt, eos)
         len_seq = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
         max_len = tf.reduce_max(len_seq)
-        # trims extra bos to make sure the lengths are right
+        # trims to make sure the lengths are right
         tgt = tgt[:max_len]
         msk_enc = not_eos[:max_len]
         msk_dec = tf.pad(msk_enc, ((1,0),(0,0)), constant_values=True)
-        # tgt reversed and having eos replaced with bos
-        gtg = tf.reverse_sequence(tgt, len_seq, seq_axis=0, batch_axis=1)
-        gtg = tf.where(msk_enc, gtg, tf.fill(tf.shape(gtg), bos))
-
-    with scope('embed'):
-        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
-        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
-        with scope('emb_enc'): # (s, b) -> (s, b, dim_emb)
-            emb_tgt = tf.gather(embedding, tgt)
-            emb_gtg = tf.gather(embedding, gtg)
-        with scope('emb_dec'): # (s, b) -> (t, b, dim_emb)
-            gold = tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
-            if 'train' == mode:
-                with scope('drop_word'):
-                    tgt *= tf.to_int32(tf.random_uniform(tf.shape(tgt)) < rate_keepwd)
-            fire = self.fire = tf.pad(tgt, paddings=((1,0),(0,0)), constant_values=bos)
-            emb_dec = tf.gather(embedding, fire)
+        # pads for decoder : lead=[bos]+tgt -> gold=tgt+[eos]
+        lead, gold = tgt, tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
+        if 'train' == mode: lead *= tf.to_int32(tf.random_uniform(tf.shape(lead)) < rate_keepwd)
+        lead = self.lead = tf.pad(lead, paddings=((1,0),(0,0)), constant_values=bos)
 
     # s : seq length
     # t : seq length plus one padding, either eos or bos
     # b : batch size
-    # d : dimension aka dim_emb
     #
     # len_seq :  b  aka s aka t-1
     # msk_enc : sb  without padding
     # msk_dec : tb  with eos
     #
-    #    fire : tb  with bos
+    #    lead : tb  with bos
     #    gold : tb  with eos
-    #
-    # emb_tgt : tbd with eos
-    # emb_gtg : tbd with bos
-    # emb_dec : tbd with bos
+
+    with scope('embed'):
+        b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
+        embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
+        emb_dec = tf.gather(embedding, lead, name='emb_dec') # (t, b) -> (t, b, dim_emb)
+        emb_enc = tf.gather(embedding,  tgt, name='emb_enc') # (s, b) -> (s, b, dim_emb)
 
     with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
-        # bidirectional won't work correctly without length mask which cudnn doesn't take;
-        # stick to unidirectional for now;
-        tgt, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_fwd')(emb_tgt) # sbd
-        gtg, _ = layer_rnn(rnn_layers, dim_emb, name='rnn_bwd')(emb_gtg) # sbd
+        reverse = partial(tf.reverse_sequence, seq_lengths=len_seq, seq_axis=0, batch_axis=1)
+
+        if bidirectional and bidir_stacked:
+            for i in range(rnn_layers):
+                with scope("rnn{}".format(i+1)):
+                    emb_tgt, _ = layer_rnn(1, dim_emb, name='fwd')(emb_enc)
+                    emb_gtg, _ = layer_rnn(1, dim_emb, name='bwd')(reverse(emb_enc))
+                    hs = emb_enc = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
+
+        elif bidirectional:
+            with scope("rnn"):
+                emb_tgt, _ = layer_rnn(rnn_layers, dim_emb, name='fwd')(emb_enc)
+                emb_gtg, _ = layer_rnn(rnn_layers, dim_emb, name='bwd')(reverse(emb_enc))
+            hs = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
+
+        else:
+            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_enc)
+
         with scope('cata'):
-            # extract the final states from the outputs
-            idx = tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1) # b2
-            fwd = tf.gather_nd(tgt, idx) # bd <- sbd, b2
-            bwd = tf.gather_nd(gtg, idx) # bd <- sbd, b2
+            # extract the final states from the outputs: bd <- sbd, b2
+            h = tf.gather_nd(hs, tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1))
             if attentive:
-                if att_cross: fwd, bwd = bwd, fwd
                 # the values are the outputs from all non-padding steps;
                 # the queries are the final states;
-                # padding mask: b1s <- sb <- bs
-                msk = tf.log(tf.to_float(tf.expand_dims(tf.transpose(msk_enc), axis=1)))
-                # query: b1d <- bd
-                fwd = tf.expand_dims(fwd, axis=1)
-                bwd = tf.expand_dims(bwd, axis=1)
-                # value: bsd <- sbd
-                tgt = tf.transpose(tgt, (1,0,2))
-                gtg = tf.transpose(gtg, (1,0,2))
-                # attend: b1d <- b1d, bsd, b1s
-                with scope('fwd'): fwd = attention(fwd, tgt, msk, dim_emb)
-                with scope('bwd'): bwd = attention(bwd, gtg, msk, dim_emb)
-                # bd <- b1d
-                fwd = tf.squeeze(fwd, axis=1)
-                bwd = tf.squeeze(bwd, axis=1)
+                h = layer_nrm(h + tf.squeeze( # bd <- b1d
+                    attention( # b1d <- b1d, bsd, b1s
+                        tf.expand_dims(h, axis=1), # query: b1d <- bd
+                        tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
+                        tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
+                            tf.expand_dims(tf.transpose(msk_enc), axis=1))),
+                        int(h.shape[-1])), 1))
 
-    with scope('latent'): # (b, dim_emb), (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
-        fwd = layer_aff(fwd, dim_emb, name='in_fwd')
-        bwd = layer_aff(bwd, dim_emb, name='in_bwd')
-        h = fwd + bwd
+    with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
+        # h = layer_aff(h, dim_emb, name='in')
         mu = self.mu = layer_aff(h, dim_rep, name='mu')
         lv = self.lv = layer_aff(h, dim_rep, name='lv')
         with scope('z'):
@@ -193,48 +182,34 @@ def vAe(mode,
 
     if 'train' == mode:
         with scope('train'):
-            train_step = self.train_step = tf.train.AdamOptimizer().minimize(loss, step)
+            train_step = self.train_step = tf.train.AdamOptimizer(rate_update).minimize(loss, step)
 
     return self
 
 
 def encode(sess, vae, tgt):
-    """returns latent state parameters `mu` and `lv` given `tgt`
+    """returns latent states
 
+    ->    array f32 (b, dim_rep)
     tgt : array i32 (b, t)
-     mu : array f32 (b, dim_rep)
-     lv : array f32 (b, dim_rep)
 
     """
-    return sess.run((vae.mu, vae.lv), {vae.tgt: tgt})
+    return sess.run(vae.z, {vae.tgt: tgt})
 
 
 def decode(sess, vae, z, steps= 256):
-    """-> array i32 (b, t)
+    """decodes latent states
 
-    z :  array f32 (b, dim_rep)
+    ->   array i32 (b, t)
+    z  : array f32 (b, dim_rep)
     t <= steps
-
-    decodes latent states
 
     """
     x = np.full((1, len(z)), vae.bos, dtype=np.int32)
     s = vae.state_in.eval({vae.z: z})
     y = []
     for _ in range(steps):
-        x, s = sess.run((vae.pred, vae.state_ex), {vae.fire: x, vae.state_in: s})
+        x, s = sess.run((vae.pred, vae.state_ex), {vae.lead: x, vae.state_in: s})
         if np.all(x == vae.eos): break
         y.append(x)
     return np.concatenate(y).T
-
-
-def sample(mu, lv, size):
-    """-> array f32 (size, dim_rep)
-
-    mu : array f32 dim_rep
-    lv : array f32 dim_rep
-
-    samples latent states given mean `mu` and log variance `lv`
-
-    """
-    return mu + np.exp(0.5 * lv) * np.random.randn(size, len(lv))
