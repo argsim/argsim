@@ -8,7 +8,6 @@ import numpy as np
 datadir = '../data/reason/reason'
 
 labels, arguments = [], []
-
 for dirs, subdirs, files in os.walk(datadir):
     # don't look into unwanted folders
     if 'labels' and 'folds' in subdirs:
@@ -23,10 +22,12 @@ for dirs, subdirs, files in os.walk(datadir):
             text = text.split("\n")
             for idx, sentence in enumerate(text):
                 if sentence[:7] == "Label##":
+                    topic = dirs.split("/")[-1]
+                    label = "{}-{}".format(topic, text[idx][7:])
                     count = 1
                     try:
                         while text[idx+count][:6] == "Line##":
-                            labels.append(text[idx][7:])
+                            labels.append(label)
                             arguments.append(text[idx+count][6:])
                             count += 1
                     except IndexError:
@@ -34,7 +35,7 @@ for dirs, subdirs, files in os.walk(datadir):
 
 # save the data
 data = "\n".join(arguments)
-file = open('..argsim/data/test_data.txt', 'w')
+file = open('../data/test_data.txt', 'w')
 file.write(data)
 file.close()
-np.save("..argsim/data/test_labels.npy", np.asarray(labels))
+np.save("../data/test_labels.npy", np.asarray(labels))
