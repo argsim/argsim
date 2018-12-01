@@ -84,34 +84,25 @@ presumably due to having more relu units dying out.
 adding relu layers always made the model worse.
 the cause is unclear.
 
-changing decoder and latent at the same time always makes it difficult to judge.
-decoder getting more powerful is not necessarily good,
-but we do want latent to get better.
+* stacked bidirectional grus
 
-todo
-- add relu layers to latent
-- if that works, add relu to decode
-- if that works, try relu rnn with attention
+the =cudnn= implementations do not support variable lengthed sequences at the moment,
+but it is so much faster than the alternatives.
+for unidirectional rnns, this is not a problem, not for grus anyways,
+since we can just extract the states from the outputs.
+however bidirectional ones won't behave correctly,
+unless we manually reverse the sequences properly.
+
+=bidirectional= runs two unidirectional rnns in parallel;
+=bidir_stacked= stacks them the usual way.
 
 * attention
 
 =attentive=
 
-we are using unidirectional gru rnns, even in the encoder.
-the reason for not using a bidirectional one is that the =cudnn= implementations
-do not support variable lengthed sequences at the moment,
-but it is so much faster than the alternatives.
-for unidirectional rnns, this is not a problem, not for grus anyways,
-since we can just extract the states from the outputs.
-however bidirectional ones won't behave correctly.
-
-the unidirectional encoder was a lot worse than the bidirectional one, until we added attention.
-specifically, the final states after the first padding steps are used as queries,
-and the outputs from all non-padding steps are used as values.
-the summarized values are now the encoder outputs.
-attention significantly improved the model.
-
-we are currently experimenting with adding a unidirectional gru
-which runs on the reversed sequences padded with =bos=.
-the backward final states are used to query the forward outputs,
-and the forward final states the backward outputs.
+we can use the final states as query, and as values the outputs from all non-padding steps.
+with multihead scaled dot-product attention,
+this made the model learn faster at the beginning,
+especially when =dim_emb= is small,
+however eventually the model without attention learned better,
+even though we added residual connection around attention.
