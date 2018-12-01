@@ -45,7 +45,7 @@ def vAe(mode,
         # model spec
         dim_tgt=8192,
         dim_emb=512,
-        dim_rep=512,
+        dim_rep=1024,
         rnn_layers=2,
         bidirectional=True,
         bidir_stacked=True,
@@ -110,14 +110,14 @@ def vAe(mode,
         if bidirectional and bidir_stacked:
             for i in range(rnn_layers):
                 with scope("rnn{}".format(i+1)):
-                    emb_tgt, _ = layer_rnn(1, dim_emb//2, name='fwd')(emb_enc)
-                    emb_gtg, _ = layer_rnn(1, dim_emb//2, name='bwd')(reverse(emb_enc))
+                    emb_tgt, _ = layer_rnn(1, dim_emb, name='fwd')(emb_enc)
+                    emb_gtg, _ = layer_rnn(1, dim_emb, name='bwd')(reverse(emb_enc))
                     hs = emb_enc = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
 
         elif bidirectional:
             with scope("rnn"):
-                emb_tgt, _ = layer_rnn(rnn_layers, dim_emb//2, name='fwd')(emb_enc)
-                emb_gtg, _ = layer_rnn(rnn_layers, dim_emb//2, name='bwd')(reverse(emb_enc))
+                emb_tgt, _ = layer_rnn(rnn_layers, dim_emb, name='fwd')(emb_enc)
+                emb_gtg, _ = layer_rnn(rnn_layers, dim_emb, name='bwd')(reverse(emb_enc))
             hs = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
 
         else:
@@ -135,7 +135,7 @@ def vAe(mode,
                         tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
                         tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
                             tf.expand_dims(tf.transpose(msk_enc), axis=1))),
-                        dim_emb), 1))
+                        int(h.shape[-1])), 1))
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         # h = layer_aff(h, dim_emb, name='in')
