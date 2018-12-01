@@ -1,44 +1,33 @@
-from model import vAe, encode, decode, sample
+from model import vAe, encode, decode
 from util_io import pform
 from util_np import np
 from util_tf import tf
 import util_sp as sp
-sess = tf.InteractiveSession()
 
 
 path_vocab = "../trial/data/vocab.model"
 path_ckpt = "../trial/ckpt"
-trial = "master"
-ckpt = 4
 
 
-# build model for inference
-vae = vAe('infer')
-# restore model from ckeckpoint
-tf.train.Saver().restore(sess, pform(path_ckpt, trial, ckpt))
-# load sentencepiece model
 vocab = sp.load_spm(path_vocab)
+s0 = "This is a test."
+s1 = "Dragons have been portrayed in film and television in many different forms."
+s2 = "His development of infinitesimal calculus opened up new applications of the methods of mathematics to science."
+tgt = sp.encode(vocab, (s0, s1, s2))
 
 
-def generate(mu, lv, n=8):
-    assert 1 == len(mu) == len(lv)
-    # sample latent states
-    z = sample(mu.ravel(), lv.ravel(), n)
-    # decode sampled z
-    y = decode(sess, vae, z)
-    # decode as sentences
-    for s in sp.decode(vocab, y):
+vae = vAe('infer')
+sess = tf.InteractiveSession()
+
+
+def auto(z, steps=256):
+    for s in sp.decode(vocab, decode(sess, vae, z, steps)):
         print(s)
 
 
-# encode one sentence as ids
-tgt = sp.encode(vocab, ["This is a test."])
-# encode as mu and lv
-mu, lv = encode(sess, vae, tgt)
-# generate sentences
-generate(mu, lv)
-
-
-# generate central sentences
-mu = lv = np.zeros((1, int(vae.mu.shape[1])))
-generate(mu, lv)
+for i in range(1, 7):
+    print()
+    ckpt = "master{}".format(i)
+    tf.train.Saver().restore(sess, pform(path_ckpt, ckpt))
+    auto(encode(sess, vae, tgt))
+    auto(np.zeros((1, int(vae.mu.shape[1]))))
