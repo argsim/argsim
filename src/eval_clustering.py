@@ -1,5 +1,5 @@
 path_lbls = "../data/test_labels.npy"
-path_inpt = "../trial/emb7.npy"
+path_inpt = "../trial/kudo18.npy"
 
 ############
 # analysis #
@@ -32,7 +32,7 @@ lbl2idx = {lbl: idx for idx, lbl in enumerate(sorted(set(labels)))}
 lbl_ids = np.array([lbl2idx[lbl] for lbl in labels])
 
 # pich the partition for analysis
-gold, gold2idx = top_ids, top2idx
+gold, gold2idx = rsn_ids, rsn2idx
 
 ###################
 # classifiication #
@@ -53,7 +53,7 @@ plt.show()
 
 # pick dimensions that the classifier sees as useful
 use_dim = np.array([idx for idx,val in enumerate(log_reg.coef_.T) if not np.allclose(val, 0.0)])
-
+np.save("../data/useful_dimension.npy",use_dim)
 # reduce the dimensions of the clustering input
 new_inpt = np.array([instance[use_dim] for instance in inpt])
 
@@ -86,6 +86,9 @@ pred_lbl = agglo_cluster.labels_
 ars = adjusted_rand_score(true_lbl, pred_lbl) #  [-1,1], 1 is perfect, 0 is random
 v_msr = v_measure_score(true_lbl, pred_lbl) # [0,1], 1 is perfect
 print("ARS: ", ars, "V_MSR: ", v_msr)
+
+
+
 
 # clustering by topics
 for top in top2idx:

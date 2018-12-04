@@ -36,13 +36,13 @@ inpt = np.concatenate(inpt, axis=0)
 # averaged representation with sentencepiece sampling #
 #######################################################
 
-def infer_avg(sent, samples=128):
-    bat = [vocab.sample_encode_as_ids(sent, -1, 0.1) for _ in range(samples)]
-    bat = vpack(bat, (len(bat), max(map(len, bat))), vocab.eos_id(), np.int32)
-    z = model.z.eval({model.tgt: bat})
-    return np.mean(z, axis=0)
+#def infer_avg(sent, samples=128):
+#    bat = [vocab.sample_encode_as_ids(sent, -1, 0.1) for _ in range(samples)]
+#    bat = vpack(bat, (len(bat), max(map(len, bat))), vocab.eos_id(), np.int32)
+#    z = model.z.eval({model.tgt: bat})
+#    return np.mean(z, axis=0)
 
-inpt = np.stack(list(map(infer, text)), axis=0)
+#inpt = np.stack(list(map(infer, text)), axis=0)
 
 ###########################
 # save embedded sentences #

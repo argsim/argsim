@@ -21,7 +21,7 @@ for dirs, subdirs, files in os.walk(datadir):
             text = open(os.path.join(dirs, file),encoding = "Windows-1252").read()
             text = text.split("\n")
             for idx, sentence in enumerate(text):
-                if sentence[:7] == "Label##":
+                if sentence[:7] == "Label##"and sentence[7:13]!="p-Other" and sentence[7:13]!="c-Other": #exclude OTHER class
                     topic = dirs.split("/")[-1]
                     label = "{}-{}".format(topic, text[idx][7:])
                     count = 1
