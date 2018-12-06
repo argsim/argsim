@@ -4,7 +4,6 @@ path_inpt = "../trial/kudo18.npy"
 ############
 # analysis #
 ############
-
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,7 +32,7 @@ lbl_ids = np.array([lbl2idx[lbl] for lbl in labels])
 
 ########################################
 # pick the partition for analysis
-gold, gold2idx = top_ids, top2idx
+gold, gold2idx = stn_ids, stn2idx
 ########################################
 
 
@@ -84,17 +83,15 @@ from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import adjusted_rand_score, v_measure_score
 
 # clustering by selection (topic, stance, reason)
-for sel in gold2idx:
+for sel in sorted(gold2idx):
      if type(sel) == str:
           points = np.array([i for i,(t,_,_) in enumerate(labels) if t == sel])
-          print("clustering by topic: ")
      elif len(sel[1]) == 1:
           points = np.array([i for i,(t,s,_) in enumerate(labels) if (t,s) == sel])
-          print("clustering by stance: ")
      else:
           points = np.array([i for i,(t,_,r) in enumerate(labels) if (t,r) == sel])
-          print("clustering by reason: ")
 
+     # use instances with only the earlier determined useful dimensions
      x, y = new_inpt[points], lbl_ids[points]
 
      agglo_cluster = AgglomerativeClustering(n_clusters=len(set(y)))
