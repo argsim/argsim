@@ -3,7 +3,6 @@
 - embedding
 - encoder
   + gru
-  + attention
 - latent
   + affine mu
   + affine lv
