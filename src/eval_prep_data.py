@@ -24,7 +24,7 @@ for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
         for idx, sentence in enumerate(text):
             if sentence[:7] == "Label##":
                 stance, reason = sentence[7:].lower().split("-")
-                # if "other" == reason: continue #exclude OTHER class
+                if "other" == reason: continue #exclude OTHER class
                 label = "{}-{}-{}".format(topic, stance, reason)
                 count = 1
                 try:
