@@ -171,6 +171,17 @@ We are computational linguists.
 :PROPERTIES:
 :BEAMER_env: frame
 :END:
+- sentence-level reason classification
+- baseline and J3 from \textcite{hasan2014you}
+| topic     | baseline | J3     | ours   |
+|-----------+----------+--------+--------|
+| abortion  |     32.7 | *39.5* | 34.4   |
+| gayRights |     23.3 | 31.4   | *34.8* |
+| marijuana |     28.7 | 35.1   | *36.0* |
+| obama     |     19.5 | *25.1* | 20.6   |
+- baseline: logistic classifier based on ngram, dependency, frame-semantic, quotation, and positional features
+- J3: joint density estimation (stance & reason) with reasons predicted for the preceding post
+- ours: logistic classifier with latent representation
 * summary
 ** problems so far                                                  :B_frame:
 :PROPERTIES:
