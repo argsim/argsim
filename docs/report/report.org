@@ -167,6 +167,28 @@ We are computational linguists.
 :PROPERTIES:
 :BEAMER_env: frame
 :END:
+- topic:
+| TOPIC     | OUR MODEL |LUISE M.2  |
+|-----------+-----------+-----+-----|
+|           | ARI |V-MSR| ARI |V-MSR|
+|-----------+-----+-----+-----+-----|
+| abortion  | .02 | .08 | .14 | .29 |
+| gayRights | .01 | .04 | .07 | .18 |
+| marijuana | .01 | .04 | .16 | .23 |
+| obama     | .01 | .09 | .15 | .34 |
+
+
+- stance:
+| Model | Measure | Abortion  | Gayrights | Marijuana |   Obama   |
+|-------+---------+-----------+-----------+-----------+-----------|
+|       |         | con | pro | con | pro | con | pro | con | pro |
+|-------+---------+-----+-----+-----+-----+-----+-----+-----+-----|
+|  ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
+|       |  V-MSR  | .04 | .07 | .02 | .02 | .05 | .03 | .06 | .06 |
+|-------+---------+-----+-----+-----+-----+-----+-----+-----+-----|
+| Luise |  ARI    | .20 | .12 | .06 | .04 | .05 | .15 | .15 | .17 |
+|  M.2  |  V-MSR  | .27 | .24 | .13 | .10 | .12 | .21 | .26 | .29 |
+
 ** classification                                                   :B_frame:
 :PROPERTIES:
 :BEAMER_env: frame
