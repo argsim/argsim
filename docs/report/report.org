@@ -177,13 +177,13 @@ We are computational linguists.
 | obama     |     19.5 | *25.1* | 20.6   |
 - baseline: logistic classifier based on ngram, dependency, frame-semantic, quotation, and positional features
 - J3: joint density estimation (stance & reason) with reasons predicted for the preceding post
-- ours: logistic classifier with latent representation
-** clustering: topic                                                :B_frame:
+- ours: logistic classifier with latent representation (l2 cost = 0.001)
+** clustering: per topic                                            :B_frame:
 :PROPERTIES:
 :BEAMER_env: frame
 :END:
 +-----------+-----------+-----------+
-| TOPIC     | OUR MODEL |LUISE M.2  |
+| Topic     | Our Model |Luise M.2  |
 +-----------+-----+-----+-----+-----+
 |           | ARI |V-MSR| ARI |V-MSR|
 +-----------+-----+-----+-----+-----+
@@ -192,16 +192,18 @@ We are computational linguists.
 | marijuana | .01 | .04 | .16 | .23 |
 | obama     | .01 | .09 | .15 | .34 |
 +-----------+-----+-----+-----+-----+
-** clustering: stance                                               :B_frame:
+- Luise: sum of pretrained CBOW embedding of filtered words
+- Our Model: 292 dimensions of the latent representation picked out with a logistic classifier (l1 cost = 0.1)
+** clustering: per stance                                           :B_frame:
 :PROPERTIES:
 :BEAMER_env: frame
 :END:
 +-------+---------+-----------+-----------+-----------+-----------+
-| Model | Measure | Abortion  | Gayrights | Marijuana |   Obama   |
+| Model | Measure | abortion  | gayRights | marijuana |   obama   |
 +-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
 |       |         | con | pro | con | pro | con | pro | con | pro |
 +-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
-|  ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
+|  Ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
 |       |  V-MSR  | .04 | .07 | .02 | .02 | .05 | .03 | .06 | .06 |
 +-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
 | Luise |  ARI    | .20 | .12 | .06 | .04 | .05 | .15 | .15 | .17 |
@@ -231,7 +233,6 @@ We are computational linguists.
   + use the reason dataset for training to generate arguments
 - clean the reason dataset
   + remove questionable instances
-  + ignore =other= labels
 - training
   + try the other training datasets
   + train on whole texts instead of sentences
