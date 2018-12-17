@@ -12,8 +12,8 @@
 :PROPERTIES:
 :BEAMER_env: frame
 :END:
-| Jan Milde      | =janmilde@uni-potsdam.de= |
-|
+| Jan Milde      | =jmilde@uni-potsdam.de=   |
+|                |                           |
 | Kuan Yu        | =kuanyu@uni-potsdam.de=   |
 |                |                           |
 | Liubov Karpova | =lkarpova@uni-potsdam.de= |
@@ -163,32 +163,6 @@ We are unsheational ismelists.
 We are compathation/thsuence.
 We are computational linguists.
 #+END_EXAMPLE
-** clustering                                                       :B_frame:
-:PROPERTIES:
-:BEAMER_env: frame
-:END:
-- topic:
-| TOPIC     | OUR MODEL |LUISE M.2  |
-|-----------+-----------+-----+-----|
-|           | ARI |V-MSR| ARI |V-MSR|
-|-----------+-----+-----+-----+-----|
-| abortion  | .02 | .08 | .14 | .29 |
-| gayRights | .01 | .04 | .07 | .18 |
-| marijuana | .01 | .04 | .16 | .23 |
-| obama     | .01 | .09 | .15 | .34 |
-
-
-- stance:
-| Model | Measure | Abortion  | Gayrights | Marijuana |   Obama   |
-|-------+---------+-----------+-----------+-----------+-----------|
-|       |         | con | pro | con | pro | con | pro | con | pro |
-|-------+---------+-----+-----+-----+-----+-----+-----+-----+-----|
-|  ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
-|       |  V-MSR  | .04 | .07 | .02 | .02 | .05 | .03 | .06 | .06 |
-|-------+---------+-----+-----+-----+-----+-----+-----+-----+-----|
-| Luise |  ARI    | .20 | .12 | .06 | .04 | .05 | .15 | .15 | .17 |
-|  M.2  |  V-MSR  | .27 | .24 | .13 | .10 | .12 | .21 | .26 | .29 |
-
 ** classification                                                   :B_frame:
 :PROPERTIES:
 :BEAMER_env: frame
@@ -204,6 +178,35 @@ We are computational linguists.
 - baseline: logistic classifier based on ngram, dependency, frame-semantic, quotation, and positional features
 - J3: joint density estimation (stance & reason) with reasons predicted for the preceding post
 - ours: logistic classifier with latent representation
+** clustering: topic                                                :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
++-----------+-----------+-----------+
+| TOPIC     | OUR MODEL |LUISE M.2  |
++-----------+-----+-----+-----+-----+
+|           | ARI |V-MSR| ARI |V-MSR|
++-----------+-----+-----+-----+-----+
+| abortion  | .02 | .08 | .14 | .29 |
+| gayRights | .01 | .04 | .07 | .18 |
+| marijuana | .01 | .04 | .16 | .23 |
+| obama     | .01 | .09 | .15 | .34 |
++-----------+-----+-----+-----+-----+
+** clustering: stance                                               :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
++-------+---------+-----------+-----------+-----------+-----------+
+| Model | Measure | Abortion  | Gayrights | Marijuana |   Obama   |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+|       |         | con | pro | con | pro | con | pro | con | pro |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+|  ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
+|       |  V-MSR  | .04 | .07 | .02 | .02 | .05 | .03 | .06 | .06 |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+| Luise |  ARI    | .20 | .12 | .06 | .04 | .05 | .15 | .15 | .17 |
+|  M.2  |  V-MSR  | .27 | .24 | .13 | .10 | .12 | .21 | .26 | .29 |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
 * summary
 ** problems so far                                                  :B_frame:
 :PROPERTIES:
