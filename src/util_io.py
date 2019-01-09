@@ -37,3 +37,13 @@ def save_pkl(filename, obj):
 def load_json(filename):
     with open(filename) as file:
         return json.load(file)
+
+
+def clean(post):
+    """cleans a post for consistency
+
+    - normalizes extra whitespaces, including newlines, to a single space
+    - lowercases everything
+
+    """
+    return " ".join(post.split()).lower()
