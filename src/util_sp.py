@@ -1,3 +1,4 @@
+from nltk.tokenize import sent_tokenize
 from sentencepiece import SentencePieceTrainer, SentencePieceProcessor
 from util_np import np, vpack
 
@@ -27,6 +28,7 @@ def spm(name, path, size= 8192, bos= 2, eos= 1, unk= 0, coverage= 0.9995):
         --bos_id={bos} \
         --eos_id={eos} \
         --unk_id={unk} \
+        --unk_surface=☹ \
         --character_coverage={coverage}".format(
             coverage= coverage
             , unk= unk
@@ -35,6 +37,30 @@ def spm(name, path, size= 8192, bos= 2, eos= 1, unk= 0, coverage= 0.9995):
             , size= size
             , path= path
             , name= name))
+
+
+def encode_capped(vocab, text, cap= 512):
+    """-> list int
+
+    encodes `text : str` with `vocab : SentencePieceProcessor`, making
+    sure that the encoded sequence is shorter than `cap`.  if the
+    whole text won't fit, encodes the first few sentences.  if even
+    the first sentence won't fit, returns the truncated sequence.
+
+    """
+    # first try
+    ids = vocab.encode_as_ids(text)
+    if len(ids) <= cap: return ids
+    # sentence split and guess the number of sentences that fit
+    sents = sent_tokenize(text)
+    n = int(len(sents) * cap / len(ids))
+    # keep reducing the number til fit
+    while 0 < n:
+        ids = vocab.encode_as_ids(" ".join(sents[:n]))
+        if len(ids) <= cap: return ids
+        n -= 1
+    # if still won't fit, simply truncate
+    return ids[:cap]
 
 
 def encode(vocab, sents, length= None, dtype= np.int32):

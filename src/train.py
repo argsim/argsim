@@ -61,6 +61,7 @@ def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=T.seed, kudo=A.sam
         s = vocab.sample_encode_as_ids(raw[i], -1, 0.1) if kudo else \
             vocab.encode_as_ids(raw[i])
         if 0 < len(s) < max_len:
+            # todo truncate instance instead of discarding it
             bat.append(s)
 
 ###############
@@ -93,12 +94,12 @@ else:
 
 wtr = tf.summary.FileWriter(pform(P.log, A.trial))
 summary = tf.summary.merge(
-    (tf.summary.scalar('step_acc',      model_valid['acc']),
+    (tf.summary.scalar('step_errt',     model_valid['errt']),
      tf.summary.scalar('step_loss_gen', model_valid['loss_gen']),
      tf.summary.scalar('step_loss_kld', model_valid['loss_kld'])))
 
 def summ(step, model=model_valid):
-    fetches = model.acc, model.loss_gen, model.loss_kld
+    fetches = model.errt, model.loss_gen, model.loss_kld
     results = map(np.mean, zip(*(
         sess.run(fetches, {model.tgt: valid[i:j]})
         for i, j in partition(len(valid), T.batch_valid, discard= False))))

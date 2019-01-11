@@ -37,7 +37,7 @@ def attention(query, value, mask, dim, head=8):
         + mask # 0 for true, -inf for false
     ) @ v # attend: btd <- bts @ bsd
     if 1 < head: a = tf.concat(tf.unstack(a), -1)
-    return a
+    return layer_aff(a, dim, name='p')
 
 
 def vAe(mode,
@@ -165,7 +165,7 @@ def vAe(mode,
 
     if 'infer' != mode:
         labels = tf.boolean_mask(gold, msk_dec, name='labels')
-        with scope('acc'): acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
+        with scope('errt'): errt = self.errt = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
 
         with scope('loss'):
             with scope('loss_gen'):
