@@ -165,7 +165,7 @@ def vAe(mode,
 
     if 'infer' != mode:
         labels = tf.boolean_mask(gold, msk_dec, name='labels')
-        with scope('errt'): errt = self.errt = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
+        with scope('errt'): errt = self.errt = tf.reduce_mean(tf.to_float(tf.not_equal(labels, pred)))
 
         with scope('loss'):
             with scope('loss_gen'):
