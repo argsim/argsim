@@ -173,8 +173,8 @@ def vAe(mode,
                 loss_gen_samp = self.loss_gen_samp = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
                 loss_gen      = self.loss_gen      = tf.reduce_mean(loss_gen_samp)
             with scope('loss_kld'):
-                loss_kid_samp = self.loss_kid_samp = 0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0)
-                loss_kld      = self.loss_kld      = tf.reduce_mean(loss_kid_samp)
+                loss_kld_samp = self.loss_kld_samp = 0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0)
+                loss_kld      = self.loss_kld      = tf.reduce_mean(loss_kld_samp)
             loss = self.loss = rate_anneal * loss_kld + loss_gen
 
     if 'train' == mode:
