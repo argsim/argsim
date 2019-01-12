@@ -28,7 +28,7 @@ os.environ['CUDA_VISIBLE_DEVICES'] = A.gpu
 # preparation #
 ###############
 
-from util import Record
+from util import Record, comp
 from model import vAe as vae
 from tqdm import tqdm
 from util_io import pform, load_txt, load_json
@@ -94,16 +94,18 @@ else:
 
 wtr = tf.summary.FileWriter(pform(P.log, A.trial))
 summary = tf.summary.merge(
-    (tf.summary.scalar('step_errt',     model_valid['errt']),
-     tf.summary.scalar('step_loss_gen', model_valid['loss_gen']),
-     tf.summary.scalar('step_loss_kld', model_valid['loss_kld'])))
+    (tf.summary.scalar('step_errt'    , model_valid.errt    ),
+     tf.summary.scalar('step_loss_gen', model_valid.loss_gen),
+     tf.summary.scalar('step_loss_kld', model_valid.loss_kld)))
 
 def summ(step, model=model_valid):
-    fetches = model.errt, model.loss_gen, model.loss_kld
-    results = map(np.mean, zip(*(
-        sess.run(fetches, {model.tgt: valid[i:j]})
-        for i, j in partition(len(valid), T.batch_valid, discard= False))))
-    wtr.add_summary(sess.run(summary, dict(zip(fetches, results))), step)
+    wtr.add_summary(
+        sess.run(summary, dict(zip(
+            (model.errt, model.loss_gen, model.loss_kld),
+            map(comp(np.mean, np.concatenate),
+                zip(*(sess.run((model.errt_samp, model.loss_gen_samp, model.loss_kld_samp), {model.tgt: valid[i:j]})
+                      for i, j in partition(len(valid), T.batch_valid, discard= False))))))),
+        step)
 
 for _ in range(A.rounds):
     for _ in range(100):

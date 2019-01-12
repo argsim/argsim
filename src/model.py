@@ -165,20 +165,17 @@ def vAe(mode,
 
     if 'infer' != mode:
         labels = tf.boolean_mask(gold, msk_dec, name='labels')
-        with scope('errt'): errt = self.errt = tf.reduce_mean(tf.to_float(tf.not_equal(labels, pred)))
-
+        with scope('errt'):
+            errt_samp = self.errt_samp = tf.to_float(tf.not_equal(labels, pred))
+            errt      = self.errt      = tf.reduce_mean(errt_samp)
         with scope('loss'):
             with scope('loss_gen'):
-                loss_gen = self.loss_gen = tf.reduce_mean(
-                    tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+                loss_gen_samp = self.loss_gen_samp = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+                loss_gen      = self.loss_gen      = tf.reduce_mean(loss_gen_samp)
             with scope('loss_kld'):
-                loss_kld = tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
-                if 'train' == mode:
-                    loss_kld *= 0.5 * rate_anneal
-                else:
-                    loss_kld *= 0.5
-                self.loss_kld = loss_kld
-            loss = self.loss = loss_kld + loss_gen
+                loss_kid_samp = self.loss_kid_samp = 0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0)
+                loss_kld      = self.loss_kld      = tf.reduce_mean(loss_kid_samp)
+            loss = self.loss = rate_anneal * loss_kld + loss_gen
 
     if 'train' == mode:
         with scope('train'):
