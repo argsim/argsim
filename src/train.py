@@ -12,6 +12,7 @@ parser.add_argument('--trial',    default="master",      help="the trial name")
 parser.add_argument('--config',   default="config.json", help="the config file")
 parser.add_argument('--ckpt',     default=None,          help="the ckeckpoint to resume")
 parser.add_argument('--gpu',      default="0",           help="the gpu to use")
+parser.add_argument('--seed',     default=0,  type=int,  help="random seed")
 parser.add_argument('--rounds',   default=0,  type=int,  help="numbers of training rounds")
 parser.add_argument('--prefetch', default=16, type=int,  help="numbers of batches to prefetch")
 parser.add_argument('--sample',   action='store_true',   help="train with sentencepiece sampling")
@@ -41,7 +42,7 @@ P = Record(config['paths'])
 C = Record(config['model'])
 T = Record(config['train'])
 
-tf.set_random_seed(T.seed)
+tf.set_random_seed(A.seed)
 
 #############
 # load data #
@@ -50,7 +51,7 @@ tf.set_random_seed(T.seed)
 vocab = load_spm(P.vocab)
 valid = np.load(P.valid)
 
-def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=T.seed, kudo=A.sample, max_len=T.max_len):
+def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=A.seed, kudo=A.sample, max_len=T.max_len):
     raw = tuple(load_txt(path))
     eos = vocab.eos_id()
     bat = []
