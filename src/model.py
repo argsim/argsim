@@ -87,7 +87,7 @@ def vAe(mode,
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
         tgt = tf.transpose(tgt) # time major order
         tgt, msk_tgt, len_tgt = trim(tgt, eos)
-        msk_tgt = tf.pad(not_eos[:max_len], ((1,0),(0,0)), constant_values=True)
+        msk_tgt = tf.pad(msk_tgt, ((1,0),(0,0)), constant_values=True)
         # pads for decoder : lead=[bos]+tgt -> gold=tgt+[eos]
         lead, gold = tgt, tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
         if 'train' == mode: lead *= tf.to_int32(tf.random_uniform(tf.shape(lead)) < rate_keepwd)

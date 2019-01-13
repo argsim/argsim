@@ -63,7 +63,7 @@ def encode_capped(vocab, text, cap= 512):
     return ids[:cap]
 
 
-def encode_capped_samle_pair(vocab, text, cap= 512):
+def encode_capped_sample_pair(vocab, text, cap= 512):
     """-> list int, list int
 
     like `encode_capped` but returns a pair of sampled sequences.

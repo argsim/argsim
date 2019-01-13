@@ -81,7 +81,7 @@ if A.profile:
             profile(sess, wtr, model_valid.loss, {model_valid.src: valid[:32], model_valid.tgt: valid[:32]})
 if not A.rounds: sys.exit("profiling done")
 
-src, tgt = pipe(batch, tf.int32, prefetch= A.prefetch)
+src, tgt = pipe(batch, (tf.int32, tf.int32), prefetch= A.prefetch)
 model_train = vae('train', src=src, tgt=tgt, **C)
 
 ############

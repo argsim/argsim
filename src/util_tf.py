@@ -3,6 +3,9 @@ from util import Record
 import tensorflow as tf
 
 
+scope = tf.variable_scope
+
+
 def profile(sess, wtr, run, feed_dict= None, prerun= 3, tag= 'flow'):
     for _ in range(prerun): sess.run(run, feed_dict)
     meta = tf.RunMetadata()
