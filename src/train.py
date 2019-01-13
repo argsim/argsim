@@ -34,7 +34,7 @@ from model import vAe as vae
 from tqdm import tqdm
 from util_io import pform, load_txt, load_json
 from util_np import np, vpack, sample, partition
-from util_sp import load_spm, encode, decode
+from util_sp import load_spm, encode_capped, encode_capped_sample_pair
 from util_tf import tf, pipe
 
 config = load_json(A.config)
@@ -52,18 +52,20 @@ vocab = load_spm(P.vocab)
 valid = np.load(P.valid)
 
 def batch(size=T.batch_train, path=P.train, vocab=vocab, seed=A.seed, kudo=A.sample, max_len=T.max_len):
+    pac = lambda arrs: vpack(arrs, (size, max(map(len, arrs))), eos, np.int32)
+    enc = encode_capped_sample_pair if kudo else encode_capped
     raw = tuple(load_txt(path))
     eos = vocab.eos_id()
     bat = []
     for i in sample(len(raw), seed):
         if size == len(bat):
-            yield vpack(bat, (size, max(map(len, bat))), eos, np.int32)
+            if kudo:
+                src , tgt = map(pac, zip(*bat))
+            else:
+                src = tgt = pac(bat)
+            yield src, tgt
             bat = []
-        s = vocab.sample_encode_as_ids(raw[i], -1, 0.1) if kudo else \
-            vocab.encode_as_ids(raw[i])
-        if 0 < len(s) < max_len:
-            # todo truncate instance instead of discarding it
-            bat.append(s)
+        bat.append(enc(vocab, raw[i], cap=max_len))
 
 ###############
 # build model #
@@ -76,11 +78,11 @@ if A.profile:
     with tf.Session() as sess:
         tf.global_variables_initializer().run()
         with tf.summary.FileWriter(pform(P.log, A.trial), sess.graph) as wtr:
-            profile(sess, wtr, model_valid.loss, feed_dict= {model_valid.tgt: valid[:32]})
+            profile(sess, wtr, model_valid.loss, {model_valid.src: valid[:32], model_valid.tgt: valid[:32]})
 if not A.rounds: sys.exit("profiling done")
 
-tgt = pipe(batch, tf.int32, prefetch= A.prefetch)
-model_train = vae('train', tgt=tgt, **C)
+src, tgt = pipe(batch, tf.int32, prefetch= A.prefetch)
+model_train = vae('train', src=src, tgt=tgt, **C)
 
 ############
 # training #
@@ -104,7 +106,8 @@ def summ(step, model=model_valid):
         sess.run(summary, dict(zip(
             (model.errt, model.loss_gen, model.loss_kld),
             map(comp(np.mean, np.concatenate),
-                zip(*(sess.run((model.errt_samp, model.loss_gen_samp, model.loss_kld_samp), {model.tgt: valid[i:j]})
+                zip(*(sess.run((model.errt_samp, model.loss_gen_samp, model.loss_kld_samp),
+                               {model.src: valid[i:j], model.tgt: valid[i:j]})
                       for i, j in partition(len(valid), T.batch_valid, discard= False))))))),
         step)
 

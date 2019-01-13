@@ -63,6 +63,30 @@ def encode_capped(vocab, text, cap= 512):
     return ids[:cap]
 
 
+def encode_capped_samle_pair(vocab, text, cap= 512):
+    """-> list int, list int
+
+    like `encode_capped` but returns a pair of sampled sequences.
+
+    """
+    enc = lambda x: vocab.sample_encode_as_ids(x, -1, 0.5)
+    # first try
+    src, tgt = enc(text), enc(text)
+    if len(src) <= cap and len(tgt) <= cap: return src, tgt
+    # sentence split and guess the number of sentences that fit
+    sents = sent_tokenize(text)
+    n = int(len(sents) * cap / max(len(src), len(tgt)))
+    # keep reducing the number til fit
+    while 0 < n:
+        txt = " ".join(sents[:n])
+        src, tgt = enc(txt), enc(txt)
+        if len(src) <= cap and len(tgt) <= cap: return src, tgt
+        n -= 1
+    # if still won't fit, revert to no sampling
+    src = tgt = encode_capped(vocab, text, cap)
+    return src, tgt
+
+
 def encode(vocab, sents, length= None, dtype= np.int32):
     """-> array dtype
 
