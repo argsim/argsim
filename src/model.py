@@ -190,14 +190,14 @@ def vAe(mode,
     return self
 
 
-def encode(sess, vae, tgt):
+def encode(sess, vae, src):
     """returns latent states
 
     ->    array f32 (b, dim_rep)
-    tgt : array i32 (b, t)
+    src : array i32 (b, t)
 
     """
-    return sess.run(vae.z, {vae.tgt: tgt})
+    return sess.run(vae.z, {vae.src: src})
 
 
 def decode(sess, vae, z, steps=256):
