@@ -110,6 +110,7 @@ def summ(step, model=model_valid):
                                {model.src: valid[i:j], model.tgt: valid[i:j]})
                       for i, j in partition(len(valid), T.batch_valid, discard= False))))))),
         step)
+    wtr.flush()
 
 for _ in range(A.rounds):
     for _ in range(100):
