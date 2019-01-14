@@ -3,7 +3,7 @@
 import argparse
 parser = argparse.ArgumentParser(description="""
 trains a variational autoencoder on text.
-logs validation statistics per 100 steps;
+logs validation statistics per 250 steps;
 saves a ckeckpoint per 10000 steps aka one round;
 the ckeckpoints are named after the trial name and the training round.
 details are specified in the config file.
@@ -113,8 +113,8 @@ def summ(step, model=model_valid):
     wtr.flush()
 
 for _ in range(A.rounds):
-    for _ in range(100):
-        for _ in tqdm(range(100), ncols= 70):
+    for _ in range(40):
+        for _ in tqdm(range(250), ncols= 70):
             sess.run(model_train.train_step)
         step = sess.run(model_train.step)
         summ(step)
