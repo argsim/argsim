@@ -23,8 +23,8 @@
     "train": {
         "seed": 0
         , "max_len": 512
-        , "batch_train": 64
-        , "batch_valid": 128
+        , "batch_train": 100
+        , "batch_valid": 200
         , "total_valid": 4096
     }
 }
