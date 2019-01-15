@@ -9,6 +9,7 @@
     ,
     "model": {
         "accelerate": 1e-4
+        , "learn_rate": 1e-3
         , "dim_tgt": 8192
         , "dim_emb": 512
         , "dim_rep": 1024

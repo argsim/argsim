@@ -59,6 +59,7 @@ def vAe(mode,
         logit_use_embed=True,
         # training spec
         accelerate=1e-4,
+        learn_rate=1e-3,
         bos=2,
         eos=1):
 
@@ -76,7 +77,7 @@ def vAe(mode,
         rate = accelerate * tf.to_float(step)
         rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
         rate_anneal = self.rate_anneal = tf.tanh(rate)
-        rate_update = self.rate_update = tf.rsqrt(rate + 1.0) * 1e-3
+        rate_update = self.rate_update = learn_rate / (tf.sqrt(rate) + 1.0)
 
     with scope('src'):
         src = self.src = placeholder(tf.int32, (None, None), src, 'src')
