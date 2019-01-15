@@ -69,7 +69,7 @@ def encode_capped_sample_pair(vocab, text, cap= 512):
     like `encode_capped` but returns a pair of sampled sequences.
 
     """
-    enc = lambda x: vocab.sample_encode_as_ids(x, 64, 0.1)
+    enc = lambda x: vocab.sample_encode_as_ids(x, -1, 0.5)
     # first try
     src, tgt = enc(text), enc(text)
     if len(src) <= cap and len(tgt) <= cap: return src, tgt
