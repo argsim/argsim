@@ -8,7 +8,7 @@
     }
     ,
     "model": {
-        "accelerate": 1e-4
+        "accelerate": 5e-5
         , "dim_tgt": 8192
         , "dim_emb": 512
         , "dim_rep": 1024
