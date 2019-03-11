@@ -40,3 +40,37 @@ for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
 save_txt("../data/test_data.txt", arguments)
 np.save("../data/test_labels.npy", np.asarray(labels))
 np.save("../data/test_folds.npy", np.asarray(folds))
+
+
+
+
+
+
+#######
+# NEW #
+
+
+import os
+import numpy as np
+from util_io import load_txt, save_txt, clean
+import re
+
+datadir = '../data/reason/reason'
+
+output = []
+for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
+    dirname = "{}/{}".format(datadir, topic)
+    for filename in sorted(os.listdir(dirname)):
+        text = open(dirname+"/"+filename, encoding="Windows-1252").read().lower()
+
+        #text = open("../data/reason/reason/abortion/A6.data.rsn", encoding="Windows-1252").read().lower()
+        post = clean(re.search(r"(.|\n)*(?=(label##|\n\n*))", text).group())
+        try:
+            label = " ".join(re.findall(r"(?<=label##).*(?=\nline##)", text))
+        except AttributeError:
+            label = []
+
+        output.append([post, label, topic])
+
+np.savez_compressed("../data/test_data", output=output)
+x=np.load("../data/test_data.npz")['output']
