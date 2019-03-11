@@ -70,7 +70,7 @@ def crossvalidation(fold2idxs, labels=stn, inputs=inputs, score=f1_micro, cost=0
 
 # topic classification
 fold2idxs = tuple(map(np.concatenate, zip(*topic2fold2idxs.values())))
-crossvalidation(fold2idxs, labels= top, cost= 0.01)
+print(crossvalidation(fold2idxs, labels= top, cost= 0.01))
 
 # stance classification per topic
 scores = []
