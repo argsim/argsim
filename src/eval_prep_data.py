@@ -57,7 +57,7 @@ import re
 
 datadir = '../data/reason/reason'
 
-output = []
+posts, labels, topics = [], [], []
 for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
     dirname = "{}/{}".format(datadir, topic)
     for filename in sorted(os.listdir(dirname)):
@@ -70,7 +70,9 @@ for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
         except AttributeError:
             label = []
 
-        output.append([post, label, topic])
+        posts.append(post)
+        labels.append(label)
+        topics.append(topic)
 
-np.savez_compressed("../data/test_data", output=output)
+np.savez_compressed("../data/test_data", posts=posts, labels=labels, topics=topics)
 x=np.load("../data/test_data.npz")['output']
