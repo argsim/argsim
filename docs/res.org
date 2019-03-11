@@ -1,0 +1,33 @@
+* stance classification
+
+cost = 0.1
+
+| abortion  | 56.75 |
+| gayRights | 56.10 |
+| marijuana | 58.77 |
+| obama     | 58.83 |
+
+0.5761091613838908
+
+* stance classification sampled
+
+cost = 0.1
+
+| abortion  | 56.75 |
+| gayRights | 56.10 |
+| marijuana | 58.77 |
+| obama     | 58.83 |
+
+0.5761091613838908
+
+* topic classification
+
+cost = 0.01
+
+0.8456164216818983
+
+* topic classification sampled
+
+cost = 0.01
+
+0.845860684093444
