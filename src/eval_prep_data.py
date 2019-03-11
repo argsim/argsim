@@ -64,7 +64,7 @@ for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
         text = open(dirname+"/"+filename, encoding="Windows-1252").read().lower()
 
         #text = open("../data/reason/reason/abortion/A6.data.rsn", encoding="Windows-1252").read().lower()
-        post = clean(re.search(r"(.|\n)*(?=(label##|\n\n*))", text).group())
+        post = clean(re.search(r".*|\n*(?=(label##|\n\n*))", text).group())
         try:
             label = " ".join(re.findall(r"(?<=label##).*(?=\nline##)", text))
         except AttributeError:
@@ -75,4 +75,3 @@ for topic in 'abortion', 'gayRights', 'marijuana', 'obama':
         topics.append(topic)
 
 np.savez_compressed("../data/test_data", posts=posts, labels=labels, topics=topics)
-x=np.load("../data/test_data.npz")['output']
