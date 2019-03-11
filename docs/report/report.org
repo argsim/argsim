@@ -1,0 +1,246 @@
+#+OPTIONS: title:nil date:nil toc:nil author:nil email:nil
+#+STARTUP: beamer
+#+LaTeX_CLASS: beamer
+#+LATEX_HEADER: \setbeamertemplate{footline}[frame number]
+#+LATEX_HEADER: \usepackage{xcolor}
+#+LATEX_HEADER: \definecolor{darkblue}{rgb}{0,0,0.5}
+#+LATEX_HEADER: \hypersetup{colorlinks=true,allcolors=darkblue}
+#+LATEX_HEADER: \usepackage[sorting=ynt,style=authoryear,uniquename=false]{biblatex}
+#+LATEX_HEADER: \addbibresource{report.bib}
+* title
+** argument similarity                                              :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+| Jan Milde      | =jmilde@uni-potsdam.de=   |
+|                |                           |
+| Kuan Yu        | =kuanyu@uni-potsdam.de=   |
+|                |                           |
+| Liubov Karpova | =lkarpova@uni-potsdam.de= |
+|                |                           |
+\hfill /December 18, 2018/
+* main idea
+** main idea                                                        :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- following Luise Schricker 2018
+- construct a representation for arguments
+- hierarchical agglomerative clustering
+- evaluate with adjusted rand index and v-measure
+** evaluation data                                                  :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[http://www.hlt.utdallas.edu/~vince/papers/emnlp14-reason.pdf][reason and stance dataset]] \parencite{hasan2014you}
+- 4 topics (abortion, gay rights, obama, marijuana)
+- 2 stances for each topic (pro & con)
+- 56 reason classes, 5--9 for each stance
+*** gay rights                                                      :B_block:
+:PROPERTIES:
+:BEAMER_env: block
+:END:
+| pro        | con            |
+|------------+----------------|
+| =normal=   | =abnormal=     |
+| =religion= | =religion=     |
+| =born=     | =gay_problems= |
+| ...        | ...            |
+** examples                                                         :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- =right_denied=
+#+BEGIN_EXAMPLE
+I believe that they should be able to because it is
+their right. Just like we have the right to marry
+one another they should be able to
+#+END_EXAMPLE
+- =right_denied=
+#+BEGIN_EXAMPLE
+yes they should they are humas to and if you love
+some on so much you get married and live together
+#+END_EXAMPLE
+** examples                                                         :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+#+BEGIN_EXAMPLE
+There are only two (2) sexes created by God,
+the male and the female gender.
+An individual is given by God a "free choice".
+Homosexuality is a person's personal choice,
+so why forbid them in exercising their right?  9
+#+END_EXAMPLE
+- =right_denied=
+#+BEGIN_EXAMPLE
+Homosexuality is a person's personal choice,
+so why forbid them in exercising their right?  9
+#+END_EXAMPLE
+- =born=
+#+BEGIN_EXAMPLE
+Homosexuality is a person's personal choice,
+#+END_EXAMPLE
+** training data                                                    :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[http://www.research.ibm.com/haifa/dept/vst/debating_data.shtml#Project][IBM debater datasets, claim sentences search]]
+  \(1.49\) million sentences
+- [[https://github.com/google-research-datasets/coarse-discourse][google research datasets (reddit)]]
+  \(9\,473\) threads comprised of \(116\,347\) comments
+- [[https://nlds.soe.ucsc.edu/iac][internet argument corpus]]
+* model
+** vae                                                              :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[https://arxiv.org/abs/1312.6114][variational autoencoder]] \parencite{kingma2013auto}
+\centering\includegraphics[width=\textwidth]{vae.pdf}
+- trained by maximizing the variational lowerbound
+- learns a disentangled latent representation
+#+BEGIN_EXPORT latex
+\begin{align*}
+\mathcal{L} \left( \theta ; x \right)
+&= \mathbb{E}_{q_{\theta} \left( z | x \right)} [ \log p_{\theta} \left( x | z \right)]
+- \mathtt{KL} \left( q_{\theta} \left( z | x \right) \| p \left( z \right) \right)\\
+&\leq \log p\left(x\right)
+\end{align*}
+#+END_EXPORT
+** vae on mnist                                                     :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+\centering\includegraphics[width=\textwidth]{vae_mnist.png}
+[[https://blog.fastforwardlabs.com/2016/08/12/introducing-variational-autoencoders-in-prose-and.html][source]]
+** vae for texts                                                    :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[https://arxiv.org/abs/1511.06349][learning sentences]] \textcite{bowman2015generating} [[https://arxiv.org/abs/1804.07972][comparisons]] \parencite{cifka2018eval}
+- [[https://arxiv.org/abs/1703.10960][learning discourse-level diversity]] \parencite{zhao2017learning}
+- [[https://arxiv.org/abs/1703.01488][learning topic model]] \parencite{srivastava2017autoencoding} [[https://arxiv.org/abs/1811.00135][dirichlet vae]] \parencite{xiao2018dirichlet}
+- [[https://arxiv.org/abs/1802.03238][learning semantic space]] \parencite{jang2018recurrent}
+- [[https://arxiv.org/abs/1810.10437][target-level sentiment analysis]] \parencite{xu2018semi}
+- [[https://arxiv.org/abs/1809.05233][abstractive sentence summarization]] \parencite{schumann2018unsupervised}
+** our model                                                        :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[https://arxiv.org/abs/1406.1078][gated recurrent units]] \parencite{cho2014learning}
+- encoder: 3 stacked bidirectional
+- decoder: 3 unidirectional
+- model dimension: 512
+- latent dimension: 1024
+- vocabulary size: 8192
+- [[https://arxiv.org/abs/1608.05859][input-ouput embedding sharing]] \parencite{press2016using}
+** vocabulary                                                       :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- [[https://github.com/google/sentencepiece][sentencepiece]] for [[https://arxiv.org/abs/1804.10959][segmentation]] \parencite{kudo2018subword}
+#+BEGIN_EXAMPLE
+_argument ation _mining
+_argument at ion _mining
+_argument ation _ min ing
+_argument ation _mini ng
+_argument a tion _mining
+#+END_EXAMPLE
+* results
+** homotopy                                                         :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+#+BEGIN_EXAMPLE
+We are linguists.
+We are lingagists.
+We are sheurges.
+We are ribisms.
+We are ribisms or bankers.
+We are sheors Islamism?).
+We are ensity controlie's.
+We are unsheational ismelists.
+We are compathation/thsuence.
+We are computational linguists.
+#+END_EXAMPLE
+** classification                                                   :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- sentence-level reason classification
+- baseline and J3 from \textcite{hasan2014you}
+| topic     | baseline | J3     | ours   |
+|-----------+----------+--------+--------|
+| abortion  |     32.7 | *39.5* | 34.4   |
+| gayRights |     23.3 | 31.4   | *34.8* |
+| marijuana |     28.7 | 35.1   | *36.0* |
+| obama     |     19.5 | *25.1* | 20.6   |
+- baseline: logistic classifier based on ngram, dependency, frame-semantic, quotation, and positional features
+- J3: joint density estimation (stance & reason) with reasons predicted for the preceding post
+- ours: logistic classifier with latent representation (l2 cost = 0.001)
+** clustering: per topic                                            :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
++-----------+-----------+-----------+
+| Topic     | Our Model |Luise M.2  |
++-----------+-----+-----+-----+-----+
+|           | ARI |V-MSR| ARI |V-MSR|
++-----------+-----+-----+-----+-----+
+| abortion  | .02 | .08 | .14 | .29 |
+| gayRights | .01 | .04 | .07 | .18 |
+| marijuana | .01 | .04 | .16 | .23 |
+| obama     | .01 | .09 | .15 | .34 |
++-----------+-----+-----+-----+-----+
+- Luise: sum of pretrained CBOW embedding of filtered words
+- Our Model: 292 dimensions of the latent representation picked out with a logistic classifier (l1 cost = 0.1)
+** clustering: per stance                                           :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
++-------+---------+-----------+-----------+-----------+-----------+
+| Model | Measure | abortion  | gayRights | marijuana |   obama   |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+|       |         | con | pro | con | pro | con | pro | con | pro |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+|  Ours |  ARI    | .03 | .02 | .01 | .01 | .00 | .01 | .00 | .01 |
+|       |  V-MSR  | .04 | .07 | .02 | .02 | .05 | .03 | .06 | .06 |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+| Luise |  ARI    | .20 | .12 | .06 | .04 | .05 | .15 | .15 | .17 |
+|  M.2  |  V-MSR  | .27 | .24 | .13 | .10 | .12 | .21 | .26 | .29 |
++-------+---------+-----+-----+-----+-----+-----+-----+-----+-----+
+* summary
+** problems so far                                                  :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- training data is very different from the evaluation data
+  + clean vs messy
+  + single sentence vs multiple sentences
+- training method not suitable for the task
+  + over 95% reconstruction accuracy, however
+  + the task is not concerned with reconstructing sentences down to each piece
+  + most info learned is irrelevant to the labels
+- evaluation data not suitable for the task
+  + labels too specific (ad hoc)
+  + questionable labeling
+** what's next                                                      :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:END:
+- rethink project objective
+  + analyze the learned representation, specifically its relevance to argument similarity
+  + use the reason dataset for training to generate arguments
+- clean the reason dataset
+  + remove questionable instances
+- training
+  + try the other training datasets
+  + train on whole texts instead of sentences
+  + train with different source and target (sentecepiece samples, paraphrasing)
+* references
+** references                                                       :B_frame:
+:PROPERTIES:
+:BEAMER_env: frame
+:BEAMER_OPT: fragile,allowframebreaks,label=
+:END:
+\printbibliography[heading=none]

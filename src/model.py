@@ -1,6 +1,6 @@
 from util import partial, Record
 from util_np import np
-from util_tf import tf, placeholder
+from util_tf import tf, placeholder, trim, get_shape
 
 
 scope = partial(tf.variable_scope, reuse=tf.AUTO_REUSE)
@@ -18,29 +18,35 @@ layer_rnn = partial(tf.contrib.cudnn_rnn.CudnnGRU, kernel_initializer=init_kern,
 def attention(query, value, mask, dim, head=8):
     """computes scaled dot-product attention
 
-    query : tensor f32 (b, t, d_q)
-    value : tensor f32 (b, s, d_v)
-     mask : tensor f32 (b, t, s)
-         -> tensor f32 (b, t, dim)
+    query : tensor f32 (b, d_q, t)
+    value : tensor f32 (b, d_v, s)
+     mask : tensor f32 (b,   t, s)
+         -> tensor f32 (b, dim, t)
 
     `dim` must be divisible by `head`
 
     """
     assert not dim % head
-    k = layer_aff(value, dim, name='k') # bsd
-    v = layer_aff(value, dim, name='v') # bsd
-    q = layer_aff(query, dim, name='q') # btd
-    if 1 < head: k, v, q = map(lambda x: tf.stack(tf.split(x, head, -1)), (k, v, q))
-    a = tf.nn.softmax( # weight
-        tf.matmul(q, k, transpose_b=True) # bts <- btd @ (bds <- bsd)
-        * ((dim // head) ** -0.5) # scale by sqrt d
-        + mask # 0 for true, -inf for false
-    ) @ v # attend: btd <- bts @ bsd
-    if 1 < head: a = tf.concat(tf.unstack(a), -1)
-    return a
+    d,h,c = dim, head, dim // head
+    b,_,t = get_shape(query)
+    b,_,s = get_shape(value)
+    # pretransformations
+    v = tf.reshape(layer_aff(value, dim, name='v'), (b,h,c,s)) # bhcs <- bds <- bvs
+    k = tf.reshape(layer_aff(value, dim, name='k'), (b,h,c,s)) # bhcs <- bds <- bvs
+    q = tf.reshape(layer_aff(query, dim, name='q'), (b,h,c,s)) # bhct <- bdt <- bqt
+    # weight
+    a = tf.matmul(q, k, transpose_a= True) # bhts <- (bhtc <- bhct) @ bhcs
+    a *= c ** -0.5
+    if mask is not None: a += tf.expand_dims(mask, axis= 1)
+    a = tf.nn.softmax(a, axis= -1)
+    # attend
+    y = tf.matmul(v, a, transpose_b= True) # bhct <- bhcs @ (bhst <- bhts)
+    # posttransformation
+    return layer_aff(tf.reshape(y, (b,d,t)), dim, name='p') # bdt <- bdt <- bhct
 
 
 def vAe(mode,
+        src=None,
         tgt=None,
         # model spec
         dim_tgt=8192,
@@ -53,6 +59,7 @@ def vAe(mode,
         logit_use_embed=True,
         # training spec
         accelerate=1e-4,
+        learn_rate=1e-3,
         bos=2,
         eos=1):
 
@@ -70,30 +77,30 @@ def vAe(mode,
         rate = accelerate * tf.to_float(step)
         rate_keepwd = self.rate_keepwd = tf.sigmoid(rate)
         rate_anneal = self.rate_anneal = tf.tanh(rate)
-        rate_update = self.rate_update = tf.reciprocal(1.0 + rate) * 1e-3
+        rate_update = self.rate_update = learn_rate / (tf.sqrt(rate) + 1.0)
+
+    with scope('src'):
+        src = self.src = placeholder(tf.int32, (None, None), src, 'src')
+        src = tf.transpose(src) # time major order
+        src, msk_src, len_src = trim(src, eos)
 
     with scope('tgt'):
         tgt = self.tgt = placeholder(tf.int32, (None, None), tgt, 'tgt')
         tgt = tf.transpose(tgt) # time major order
-        not_eos = tf.not_equal(tgt, eos)
-        len_seq = tf.reduce_sum(tf.to_int32(not_eos), axis=0)
-        max_len = tf.reduce_max(len_seq)
-        # trims to make sure the lengths are right
-        tgt = tgt[:max_len]
-        msk_enc = not_eos[:max_len]
-        msk_dec = tf.pad(msk_enc, ((1,0),(0,0)), constant_values=True)
+        tgt, msk_tgt, len_tgt = trim(tgt, eos)
+        msk_tgt = tf.pad(msk_tgt, ((1,0),(0,0)), constant_values=True)
         # pads for decoder : lead=[bos]+tgt -> gold=tgt+[eos]
         lead, gold = tgt, tf.pad(tgt, paddings=((0,1),(0,0)), constant_values=eos)
         if 'train' == mode: lead *= tf.to_int32(tf.random_uniform(tf.shape(lead)) < rate_keepwd)
         lead = self.lead = tf.pad(lead, paddings=((1,0),(0,0)), constant_values=bos)
 
-    # s : seq length
-    # t : seq length plus one padding, either eos or bos
+    # s : src length
+    # t : tgt length plus one padding, either eos or bos
     # b : batch size
     #
-    # len_seq :  b  aka s aka t-1
-    # msk_enc : sb  without padding
-    # msk_dec : tb  with eos
+    # len_src :  b  aka s
+    # msk_src : sb  without padding
+    # msk_tgt : tb  with eos
     #
     #    lead : tb  with bos
     #    gold : tb  with eos
@@ -101,41 +108,41 @@ def vAe(mode,
     with scope('embed'):
         b = (6 / (dim_tgt / dim_emb + 1)) ** 0.5
         embedding = tf.get_variable('embedding', (dim_tgt, dim_emb), initializer=tf.random_uniform_initializer(-b,b))
-        emb_dec = tf.gather(embedding, lead, name='emb_dec') # (t, b) -> (t, b, dim_emb)
-        emb_enc = tf.gather(embedding,  tgt, name='emb_enc') # (s, b) -> (s, b, dim_emb)
+        emb_tgt = tf.gather(embedding, lead, name='emb_tgt') # (t, b) -> (t, b, dim_emb)
+        emb_src = tf.gather(embedding,  src, name='emb_src') # (s, b) -> (s, b, dim_emb)
 
     with scope('encode'): # (s, b, dim_emb) -> (b, dim_emb)
-        reverse = partial(tf.reverse_sequence, seq_lengths=len_seq, seq_axis=0, batch_axis=1)
+        reverse = partial(tf.reverse_sequence, seq_lengths=len_src, seq_axis=0, batch_axis=1)
 
         if bidirectional and bidir_stacked:
             for i in range(rnn_layers):
                 with scope("rnn{}".format(i+1)):
-                    emb_tgt, _ = layer_rnn(1, dim_emb, name='fwd')(emb_enc)
-                    emb_gtg, _ = layer_rnn(1, dim_emb, name='bwd')(reverse(emb_enc))
-                    hs = emb_enc = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
+                    emb_fwd, _ = layer_rnn(1, dim_emb, name='fwd')(emb_src)
+                    emb_bwd, _ = layer_rnn(1, dim_emb, name='bwd')(reverse(emb_src))
+                    hs = emb_src = tf.concat((emb_fwd, reverse(emb_bwd)), axis=-1)
 
         elif bidirectional:
             with scope("rnn"):
-                emb_tgt, _ = layer_rnn(rnn_layers, dim_emb, name='fwd')(emb_enc)
-                emb_gtg, _ = layer_rnn(rnn_layers, dim_emb, name='bwd')(reverse(emb_enc))
-            hs = tf.concat((emb_tgt, reverse(emb_gtg)), axis=-1)
+                emb_fwd, _ = layer_rnn(rnn_layers, dim_emb, name='fwd')(emb_src)
+                emb_bwd, _ = layer_rnn(rnn_layers, dim_emb, name='bwd')(reverse(emb_src))
+            hs = tf.concat((emb_fwd, reverse(emb_bwd)), axis=-1)
 
         else:
-            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_enc)
+            hs, _ = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_src)
 
         with scope('cata'):
             # extract the final states from the outputs: bd <- sbd, b2
-            h = tf.gather_nd(hs, tf.stack((len_seq-1, tf.range(tf.size(len_seq), dtype=tf.int32)), axis=1))
-            if attentive:
+            h = tf.gather_nd(hs, tf.stack((len_src-1, tf.range(tf.size(len_src), dtype=tf.int32)), axis=1))
+            if attentive: # todo fixme
                 # the values are the outputs from all non-padding steps;
                 # the queries are the final states;
-                h = layer_nrm(h + tf.squeeze( # bd <- b1d
-                    attention( # b1d <- b1d, bsd, b1s
-                        tf.expand_dims(h, axis=1), # query: b1d <- bd
-                        tf.transpose(hs, (1,0,2)), # value: bsd <- sbd
+                h = layer_nrm(h + tf.squeeze( # bd <- bd1
+                    attention( # bd1 <- bd1, bds, b1s
+                        tf.expand_dims(h, axis=2), # query: bd1 <- bd
+                        tf.transpose(hs, (1,2,0)), # value: bds <- sbd
                         tf.log(tf.to_float( # -inf,0  mask: b1s <- sb <- bs
-                            tf.expand_dims(tf.transpose(msk_enc), axis=1))),
-                        int(h.shape[-1])), 1))
+                            tf.expand_dims(tf.transpose(msk_src), axis=1))),
+                        int(h.shape[-1])), 2))
 
     with scope('latent'): # (b, dim_emb) -> (b, dim_rep) -> (b, dim_emb)
         # h = layer_aff(h, dim_emb, name='in')
@@ -150,8 +157,8 @@ def vAe(mode,
 
     with scope('decode'): # (b, dim_emb) -> (t, b, dim_emb) -> (?, dim_emb)
         h = self.state_in = tf.stack((h,)*rnn_layers)
-        h, _ = _, (self.state_ex,) = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_dec, initial_state=(h,))
-        if 'infer' != mode: h = tf.boolean_mask(h, msk_dec)
+        h, _ = _, (self.state_ex,) = layer_rnn(rnn_layers, dim_emb, name='rnn')(emb_tgt, initial_state=(h,))
+        if 'infer' != mode: h = tf.boolean_mask(h, msk_tgt)
         h = layer_aff(h, dim_emb, name='out')
 
     with scope('logits'): # (?, dim_emb) -> (?, dim_tgt)
@@ -164,21 +171,18 @@ def vAe(mode,
     with scope('pred'): pred = self.pred = tf.argmax(logits, -1, output_type=tf.int32)
 
     if 'infer' != mode:
-        labels = tf.boolean_mask(gold, msk_dec, name='labels')
-        with scope('acc'): acc = self.acc = tf.reduce_mean(tf.to_float(tf.equal(labels, pred)))
-
+        labels = tf.boolean_mask(gold, msk_tgt, name='labels')
+        with scope('errt'):
+            errt_samp = self.errt_samp = tf.to_float(tf.not_equal(labels, pred))
+            errt      = self.errt      = tf.reduce_mean(errt_samp)
         with scope('loss'):
             with scope('loss_gen'):
-                loss_gen = self.loss_gen = tf.reduce_mean(
-                    tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits))
+                loss_gen_samp = self.loss_gen_samp = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=labels, logits=logits)
+                loss_gen      = self.loss_gen      = tf.reduce_mean(loss_gen_samp)
             with scope('loss_kld'):
-                loss_kld = tf.reduce_mean(tf.square(mu) + tf.exp(lv) - lv - 1.0)
-                if 'train' == mode:
-                    loss_kld *= 0.5 * rate_anneal
-                else:
-                    loss_kld *= 0.5
-                self.loss_kld = loss_kld
-            loss = self.loss = loss_kld + loss_gen
+                loss_kld_samp = self.loss_kld_samp = 0.5 * (tf.square(mu) + tf.exp(lv) - lv - 1.0)
+                loss_kld      = self.loss_kld      = tf.reduce_mean(loss_kld_samp)
+            loss = self.loss = rate_anneal * loss_kld + loss_gen
 
     if 'train' == mode:
         with scope('train'):
@@ -187,14 +191,14 @@ def vAe(mode,
     return self
 
 
-def encode(sess, vae, tgt):
+def encode(sess, vae, src):
     """returns latent states
 
     ->    array f32 (b, dim_rep)
-    tgt : array i32 (b, t)
+    src : array i32 (b, t)
 
     """
-    return sess.run(vae.z, {vae.tgt: tgt})
+    return sess.run(vae.z, {vae.src: src})
 
 
 def decode(sess, vae, z, steps=256):

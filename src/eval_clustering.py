@@ -1,10 +1,9 @@
 path_lbls = "../data/test_labels.npy"
-path_inpt = "../trial/emb7.npy"
+path_inpt = "../trial/kudo18.npy"
 
 ############
 # analysis #
 ############
-
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,8 +30,11 @@ rsn_ids = np.array([rsn2idx[rsn] for rsn in reason])
 lbl2idx = {lbl: idx for idx, lbl in enumerate(sorted(set(labels)))}
 lbl_ids = np.array([lbl2idx[lbl] for lbl in labels])
 
-# pich the partition for analysis
-gold, gold2idx = top_ids, top2idx
+########################################
+# pick the partition for analysis
+gold, gold2idx = stn_ids, stn2idx
+########################################
+
 
 ###################
 # classifiication #
@@ -53,23 +55,25 @@ plt.show()
 
 # pick dimensions that the classifier sees as useful
 use_dim = np.array([idx for idx,val in enumerate(log_reg.coef_.T) if not np.allclose(val, 0.0)])
-
+np.save("../data/useful_dimension.npy",use_dim)
 # reduce the dimensions of the clustering input
 new_inpt = np.array([instance[use_dim] for instance in inpt])
+
 
 ############################
 # embedding visualizatioin #
 ############################
 
-from sklearn.manifold import TSNE
+#from sklearn.manifold import TSNE
+#
+#x = new_inpt
+#x = new_inpt / np.linalg.norm(new_inpt, axis=-1, keepdims=True)
+#
+#e = TSNE(n_components=2).fit_transform(x)
+#
+#plt.scatter(e[:,0], e[:,1], c=gold)
+#plt.show()
 
-x = new_inpt
-x = new_inpt / np.linalg.norm(new_inpt, axis=-1, keepdims=True)
-
-e = TSNE(n_components=2).fit_transform(x)
-
-plt.scatter(e[:,0], e[:,1], c=gold)
-plt.show()
 
 ##############
 # clustering #
@@ -78,20 +82,16 @@ plt.show()
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import adjusted_rand_score, v_measure_score
 
-agglo_cluster = AgglomerativeClustering(n_clusters=len(set(true_lbl)))
-agglo_cluster.fit(new_inpt)
-pred_lbl = agglo_cluster.labels_
+# clustering by selection (topic, stance, reason)
+for sel in sorted(gold2idx):
+     if type(sel) == str:
+          points = np.array([i for i,(t,_,_) in enumerate(labels) if t == sel])
+     elif len(sel[1]) == 1:
+          points = np.array([i for i,(t,s,_) in enumerate(labels) if (t,s) == sel])
+     else:
+          points = np.array([i for i,(t,_,r) in enumerate(labels) if (t,r) == sel])
 
-# Evaluate
-ars = adjusted_rand_score(true_lbl, pred_lbl) #  [-1,1], 1 is perfect, 0 is random
-v_msr = v_measure_score(true_lbl, pred_lbl) # [0,1], 1 is perfect
-print("ARS: ", ars, "V_MSR: ", v_msr)
-
-# clustering by topics
-for top in top2idx:
-
-     points = np.array([i for i,(t,_,_) in enumerate(labels) if t == top])
-
+     # use instances with only the earlier determined useful dimensions
      x, y = new_inpt[points], lbl_ids[points]
 
      agglo_cluster = AgglomerativeClustering(n_clusters=len(set(y)))
@@ -100,4 +100,4 @@ for top in top2idx:
 
      ars = adjusted_rand_score(y, pred_lbl) #  [-1,1], 1 is perfect, 0 is random
      v_msr = v_measure_score(y, pred_lbl) # [0,1], 1 is perfect
-     print("{}\tARS: {:.4F}\tV_MSR: {:.4f}".format(top, ars, v_msr))
+     print("{:<20s}\tARS: {:.4F}\tV_MSR: {:.4f}".format(str(sel), ars, v_msr))

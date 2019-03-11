@@ -9,9 +9,9 @@ def pform(path, *names, sep= ''):
     return join(expanduser(path), sep.join(map(str, names)))
 
 
-def load_txt(filename):
+def load_txt(filename, encoding= None):
     """yields lines from text file."""
-    with open(filename) as file:
+    with open(filename, encoding= encoding) as file:
         yield from (line[:-1] for line in file)
 
 
@@ -37,3 +37,13 @@ def save_pkl(filename, obj):
 def load_json(filename):
     with open(filename) as file:
         return json.load(file)
+
+
+def clean(post):
+    """cleans a post for consistency
+
+    - normalizes extra whitespaces, including newlines, to a single space
+    - lowercases everything
+
+    """
+    return " ".join(post.split()).lower()
