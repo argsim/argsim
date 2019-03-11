@@ -2,6 +2,7 @@
 
 path_ckpt = "../trial/ckpt/kudo396"
 path_emb = "../data/test_data_emb.npy"
+# path_emb = "../data/test_data_emb_sample.npy"
 
 path_vocab = "../trial/data/vocab.model"
 path_data = "../data/test_data.npz"
@@ -14,7 +15,7 @@ import util_sp as sp
 from util_np import vpack
 
 # load test sentences
-text = np.load(path_data)["arr_0"]
+text = np.load(path_data)["posts"]
 
 
 # load sentencepiece model
@@ -48,7 +49,8 @@ inpt = np.concatenate(inpt, axis=0)
 #    z = model.z.eval({model.src: bat})
 #    return np.mean(z, axis=0)
 
-# inpt = np.stack(list(map(infer_avg, text)), axis=0)
+# from tqdm import tqdm
+# inpt = np.stack(list(map(infer_avg, tqdm(text))), axis=0)
 
 ###########################
 # save embedded sentences #
