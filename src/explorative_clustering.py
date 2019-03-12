@@ -41,20 +41,22 @@ def analyze(cluster, cluster_lbl, threshold, counts, max_acc=1):
 # GET DATA #
 ############
 
+test_data = np.load("../data/test_data.npz")
+
 ### Labels
 # all labels
-labels = [" ".join(sorted(l.split())) for l in  np.load("../data/test_data.npz")['labels']]
+labels = [" ".join(sorted(l.split())) for l in test_data['labels']]
 # only first labels
 #labels = [l.split()[0] if l else "" for l in  np.load("../data/test_data.npz")['labels']]
 
-topics = np.load("../data/test_data.npz")['topics']
-posts = np.load("../data/test_data.npz")["posts"]
+topics = test_data['topics']
+posts = test_data["posts"]
 
 ### Embeddings
 # normal
-#embed = np.load("../data/test_data_emb.npy")
+embed = np.load("../data/test_data_emb.npy")
 # sentenc epiece sample
-embed = np.load("../data/test_data_emb_sample.npy")
+embed_sp = np.load("../data/test_data_emb_sample.npy")
 
 
 ########################
@@ -87,29 +89,69 @@ plt.show()
 #######################
 # AFFINITY PROPAGTION #
 #######################
+from scipy.spatial import distance
 from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
-precomp_dist = squareform(pdist(embed, 'cosine'))
-
-### TOPIC
-af = AffinityPropagation(affinity="precomputed", max_iter=200, verbose=True).fit(precomp_dist)
-cluster_labels = af.labels_
-
-
-### save all info to csv
-all_data=[]
-for p,t,l,c in zip(posts, topics, labels, cluster_labels):
-    all_data.append([p,t,l,c])
-df = pd.DataFrame(all_data)
-df.to_csv("../data/no_sample_cosine.csv")
 
 ### analyze for different topics
-tpc = [1 if t =="obama" else 0 for t in topics]
-#tpc = [1 if t =="abortion" else 0 for t in topics]
-#tpc = [1 if t =="gayRights" else 0 for t in topics]
-#tpc = [1 if t =="marijuana" else 0 for t in topics]
+def analyze2(af):
+    for topic in tpc_dic:
+        tpc = (topics == topic).astype(np.int)
+        pred_counts, pred_acc, best_pred, cluster_lbl = analyze(af, tpc, 0.5, 1.1)
+        best_pred = sorted(best_pred, key= lambda x: -x[1])
+        print(topic.ljust(9), *["{:.2f}({:02d})".format(a, c) for _, a, c in best_pred])
+    print(len(pred_counts), "clusters")
 
-pred_counts, pred_acc, best_pred, cluster_lbl = analyze(af, tpc, 0.5, 1.1)
+### euclidean
+af = AffinityPropagation(affinity="euclidean", max_iter=200, verbose=True).fit(embed)
+analyze2(af)
+cluster_labels_euc = af.labels_
+
+### euclidean with sampled embed
+af = AffinityPropagation(affinity="euclidean", max_iter=200, verbose=True).fit(embed_sp)
+analyze2(af)
+cluster_labels_euc_sp = af.labels_
+
+### cosine
+precomp_dist = squareform(- pdist(embed, 'cosine'))
+af = AffinityPropagation(affinity="precomputed", max_iter=200, verbose=True).fit(precomp_dist)
+analyze2(af)
+cluster_labels_cos = af.labels_
+
+### cosine with sampled embed
+precomp_dist = squareform(- pdist(embed_sp, 'cosine'))
+af = AffinityPropagation(affinity="precomputed", max_iter=200, verbose=True).fit(precomp_dist)
+analyze2(af)
+cluster_labels_cos_sp = af.labels_
+
+### distance to centroids
+def dist_to_centroids(x, cluster_labels, dist_fn):
+    row = np.arange(len(x)) # original row ids
+    cls = [cluster_labels == c for c in set(cluster_labels)] # cluster masks
+    row, cls = zip(*((row[c], x[c]) for c in cls)) # rows, clusters
+    row = np.concatenate(row) # current row id -> original row id
+    ctr = np.stack([np.mean(zs, axis= 0) for zs in cls]) # centroids
+    dis = np.concatenate([np.array([dist_fn(z, c) for z in zs]) for zs, c in zip(cls, ctr)]) # distances
+    return dis[np.argsort(row)] # restore original row ordering
+
+dist_euc = dist_to_centroids(embed, cluster_labels_euc, distance.sqeuclidean)
+dist_cos = dist_to_centroids(embed, cluster_labels_cos, distance.cosine)
+dist_euc_sp = dist_to_centroids(embed_sp, cluster_labels_euc_sp, distance.sqeuclidean)
+dist_cos_sp = dist_to_centroids(embed_sp, cluster_labels_cos_sp, distance.cosine)
+
+### save all info to csv
+df = pd.DataFrame({
+    "post": posts, "topic": topics, "labels": labels
+    , "cluster_euc": cluster_labels_euc, "dist_euc": dist_euc
+    , "cluster_cos": cluster_labels_cos, "dist_cos": dist_cos
+    , "cluster_euc_sp": cluster_labels_euc_sp, "dist_euc_sp": dist_euc_sp
+    , "cluster_cos_sp": cluster_labels_cos_sp, "dist_cos_sp": dist_cos_sp})
+
+df.to_csv("../data/clustering.csv"
+          , index_label= "id"
+          , columns= "post topic labels \
+          cluster_euc dist_euc cluster_euc_sp dist_euc_sp \
+          cluster_cos dist_cos cluster_cos_sp dist_cos_sp".split())
 
 #############################################################################################
 #########################
