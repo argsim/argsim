@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 
-path_csv = "../data/data_sets"
+path_csv = "../data/ibm_claim"
 path_txt = "../data/ibm_claim.txt"
 
 path_vocab = "../trial/data/vocab"
