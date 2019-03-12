@@ -3,7 +3,7 @@
 path_ckpt = "../trial/ckpt/kudo396"
 path_vocab = "../trial/data/vocab.model"
 
-path_csv    = "../data/clustering.csv"
+path_csv    = "../docs/results_iac/clustering.csv"
 path_emb    = "../data/test_data_emb.npy"
 path_emb_sp = "../data/test_data_emb_sample.npy"
 
@@ -35,7 +35,7 @@ tf.train.Saver().restore(sess, path_ckpt)
 ###########################
 
 for col in "euc euc_sp cos cos_sp".split():
-   cluster = df["cluster_{}".format(col)].values
+   cluster = df["cls_{}".format(col)].values
    centroids = np.stack([np.mean(emb[cluster == c], axis= 0) for c in range(cluster.max() + 1)])
    y = decode(sess, model, centroids, steps= 512)
    save_txt("../trial/centroids_{}".format(col), sp.decode(vocab, y))

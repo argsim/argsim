@@ -20,14 +20,22 @@ def analyze(cluster, cluster_lbl, threshold, counts, max_acc=1):
     """
     labels = cluster.labels_
     n_clusters = len(set(labels))
+    # comment:
+    # since the only info from cluster being used here are the labels
+    # this function might as well just take the labels as input
 
     pred_match = np.zeros(n_clusters)
     for idx, label in enumerate(labels):
         if cluster_lbl[idx] == 1:
             pred_match[label] += 1
+    # comment:
+    # why not simply zip labels and cluster_lbl instead of
 
     # array that counts how many instances are in the cluster
     pred_counts = np.array([x[1] for x in list(Counter(labels).items())])
+    # comment:
+    # a Counter is an unordered collection !!!
+    # pred_counts and pred_match are not guarantee to align up
 
     pred_acc = np.array([(b/a) if b!=0 else 0 for a, b in zip(pred_counts, pred_match)])
 
@@ -35,6 +43,16 @@ def analyze(cluster, cluster_lbl, threshold, counts, max_acc=1):
                  if x>threshold and pred_counts[idx]>counts and x<max_acc]
 
     return pred_counts, pred_acc, best_pred, labels
+
+
+def analyze(pred, mask, min_acc= 0.5, min_cnt= 2):
+    lbl2hit = Counter(pred[mask])
+    lbl2cnt = Counter(pred)
+    lbl_cnt_acc = [(lbl, cnt, lbl2hit[lbl] / cnt) for lbl, cnt in lbl2cnt.items()]
+    lbl_cnt_acc.sort(key= lambda x: -x[-1])
+    for lbl, cnt, acc in lbl_cnt_acc:
+        if min_acc <= acc and min_cnt <= cnt:
+            yield lbl, cnt, acc
 
 
 ############
@@ -45,9 +63,9 @@ test_data = np.load("../data/test_data.npz")
 
 ### Labels
 # all labels
-labels = [" ".join(sorted(l.split())) for l in test_data['labels']]
+labels = np.array([" ".join(sorted(l.split())) for l in test_data['labels']])
 # only first labels
-#labels = [l.split()[0] if l else "" for l in  np.load("../data/test_data.npz")['labels']]
+# labels = np.array([l.split()[0] if l else "" for l in  test_data['labels']])
 
 topics = test_data['topics']
 posts = test_data["posts"]
@@ -94,35 +112,33 @@ from scipy.spatial.distance import pdist
 from scipy.spatial.distance import squareform
 
 ### analyze for different topics
-def analyze2(af):
-    for topic in tpc_dic:
-        tpc = (topics == topic).astype(np.int)
-        pred_counts, pred_acc, best_pred, cluster_lbl = analyze(af, tpc, 0.5, 1.1)
-        best_pred = sorted(best_pred, key= lambda x: -x[1])
-        print(topic.ljust(9), *["{:.2f}({:02d})".format(a, c) for _, a, c in best_pred])
-    print(len(pred_counts), "clusters")
+def analyze2(cluster_labels):
+    for topic in "obama gayRights abortion marijuana".split():
+        cls_cnt_acc = analyze(cluster_labels, topics == topic)
+        print(topic.ljust(9), *["{:.3f}|{:03d}|{:03d}".format(a, n, c) for c, n, a in cls_cnt_acc])
+    print(len(set(cluster_labels)), "clusters")
 
 ### euclidean
 af = AffinityPropagation(affinity="euclidean", max_iter=200, verbose=True).fit(embed)
-analyze2(af)
 cluster_labels_euc = af.labels_
+analyze2(cluster_labels_euc)
 
 ### euclidean with sampled embed
 af = AffinityPropagation(affinity="euclidean", max_iter=200, verbose=True).fit(embed_sp)
-analyze2(af)
 cluster_labels_euc_sp = af.labels_
+analyze2(cluster_labels_euc_sp)
 
 ### cosine
 precomp_dist = squareform(- pdist(embed, 'cosine'))
 af = AffinityPropagation(affinity="precomputed", max_iter=200, verbose=True).fit(precomp_dist)
-analyze2(af)
 cluster_labels_cos = af.labels_
+analyze2(cluster_labels_cos)
 
 ### cosine with sampled embed
 precomp_dist = squareform(- pdist(embed_sp, 'cosine'))
 af = AffinityPropagation(affinity="precomputed", max_iter=200, verbose=True).fit(precomp_dist)
-analyze2(af)
 cluster_labels_cos_sp = af.labels_
+analyze2(cluster_labels_cos_sp)
 
 ### distance to centroids
 def dist_to_centroids(x, cluster_labels, dist_fn):
@@ -142,16 +158,16 @@ dist_cos_sp = dist_to_centroids(embed_sp, cluster_labels_cos_sp, distance.cosine
 ### save all info to csv
 df = pd.DataFrame({
     "post": posts, "topic": topics, "labels": labels
-    , "cluster_euc": cluster_labels_euc, "dist_euc": dist_euc
-    , "cluster_cos": cluster_labels_cos, "dist_cos": dist_cos
-    , "cluster_euc_sp": cluster_labels_euc_sp, "dist_euc_sp": dist_euc_sp
-    , "cluster_cos_sp": cluster_labels_cos_sp, "dist_cos_sp": dist_cos_sp})
+    , "cls_euc": cluster_labels_euc, "dist_euc": dist_euc
+    , "cls_cos": cluster_labels_cos, "dist_cos": dist_cos
+    , "cls_euc_sp": cluster_labels_euc_sp, "dist_euc_sp": dist_euc_sp
+    , "cls_cos_sp": cluster_labels_cos_sp, "dist_cos_sp": dist_cos_sp})
 
-df.to_csv("../data/clustering.csv"
+df.to_csv("../trial/clustering.csv"
           , index_label= "id"
           , columns= "post topic labels \
-          cluster_euc dist_euc cluster_euc_sp dist_euc_sp \
-          cluster_cos dist_cos cluster_cos_sp dist_cos_sp".split())
+          cls_euc dist_euc cls_euc_sp dist_euc_sp \
+          cls_cos dist_cos cls_cos_sp dist_cos_sp".split())
 
 #############################################################################################
 #########################
