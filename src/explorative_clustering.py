@@ -6,44 +6,6 @@ from sklearn.cluster import AffinityPropagation
 from collections import Counter
 import csv
 
-def analyze(cluster, cluster_lbl, threshold, counts, max_acc=1):
-    """
-         cluster: sklearn clustering algorithm that has been fit on the cluster data
-     cluster_lbl: the labels of the cluster_data
-        treshold: 0.xx how many % of a cluster have to be of the chosen code for it to become relevant
-          counts: how many instances must be in a cluster>counts
-         max_acc: only clusters with an accuracy smaller than max_acc are selected
-
-     return: pred_counts = number of instances per cluster
-             pred_acc    = % of instances in the cluster being of the code
-             best_pred   = cluster above treshold and count
-    """
-    labels = cluster.labels_
-    n_clusters = len(set(labels))
-    # comment:
-    # since the only info from cluster being used here are the labels
-    # this function might as well just take the labels as input
-
-    pred_match = np.zeros(n_clusters)
-    for idx, label in enumerate(labels):
-        if cluster_lbl[idx] == 1:
-            pred_match[label] += 1
-    # comment:
-    # why not simply zip labels and cluster_lbl instead of
-
-    # array that counts how many instances are in the cluster
-    pred_counts = np.array([x[1] for x in list(Counter(labels).items())])
-    # comment:
-    # a Counter is an unordered collection !!!
-    # pred_counts and pred_match are not guarantee to align up
-
-    pred_acc = np.array([(b/a) if b!=0 else 0 for a, b in zip(pred_counts, pred_match)])
-
-    best_pred = [[idx, x, pred_counts[idx]] for idx, x in enumerate(pred_acc)
-                 if x>threshold and pred_counts[idx]>counts and x<max_acc]
-
-    return pred_counts, pred_acc, best_pred, labels
-
 
 def analyze(pred, mask, min_acc= 0.5, min_cnt= 2):
     lbl2hit = Counter(pred[mask])
