@@ -1,8 +1,4 @@
-* argsim
-
-variational autoencoder for argument representation learning
-
-** documentations
+* documentations
 
 - [[docs/paper/paper.pdf][the paper]]
 - [[docs/report/report.pdf][the interim report]]
@@ -10,15 +6,20 @@ variational autoencoder for argument representation learning
 - [[docs/log.org][experiment log]]
 - [[docs/results_iac][post-related results]]
 
-** quick start
+* quick start
 
-*** dependencies
+** dependencies
 
 - [[https://www.python.org/][python3]]
 - [[https://www.tensorflow.org/][tensorflow]]
 - [[https://github.com/google/sentencepiece][sentencepiece]]
+- [[https://www.nltk.org/][nltk]]
+- [[https://scikit-learn.org/stable/][scikit-learn]]
+- [[https://pandas.pydata.org/][pandas]]
+- [[https://matplotlib.org/][matplotlib]]
+- [[https://tqdm.github.io/][tqdm]]
 
-*** datasets
+** datasets
 
 #+BEGIN_SRC bash :eval no
 mkdir data
@@ -30,18 +31,18 @@ download and unzip the following datasets into =data=
 - [[http://www.research.ibm.com/haifa/dept/vst/debating_data.shtml#Project][claim sentences search]] for sentence modeling (use dirname =ibm_claim=)
 - [[https://nlds.soe.ucsc.edu/iac][internet argument corpus v1.1]] for post modeling (use dirname =iac_v1.1=)
 
-*** to reproduce our results
+** to reproduce our results
 
 #+BEGIN_SRC bash :eval no
 mkdir trial trial/data trial/ckpt
 cd src
 #+END_SRC
 
-- prepare the data
+*** prepare the data
 
 run =./data_ibm.py= or =./data_iac.py=
 
-- train a new model
+*** train a new model
 
 #+BEGIN_SRC bash :eval no
 ./train.py
@@ -50,17 +51,16 @@ run =./data_ibm.py= or =./data_iac.py=
 check =./train.py --help= for arguments
 and see =config.json= for more configurations.
 
-- evaluation and exploration
+*** evaluation and exploration
 
-this part is messy, due to the experimental nature of this project.
+this part is messy due to the experimental nature of this project, but basically:
 
-basically first run =eval_prep_data_*.py= to prepare the evaluation data.
-then run =eval_embed*.py= to embed the prepared data using the trained model.
-finally run =eval_classification*.py= for classification
-and =eval_clustering*.py= for clustering.
-there are also a few scripts named =explore*.py= for explorations.
+- run =eval_prep_data_*.py= to prepare the evaluation data
+- run =eval_embed*.py= to embed the prepared data using the trained model
+- run =eval_classification*.py= for classification and =eval_clustering*.py= for clustering
+- there are also a few scripts named =explore*.py= for explorations
 
-*** default paths, git ignored
+** default paths, git ignored
 
 - =data= for storing raw data
 - =trial/data= for storing processed data
