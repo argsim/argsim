@@ -1,6 +1,14 @@
 * argsim
 
-argument similarity learning with variational autoencoder
+variational autoencoder for argument representation learning
+
+** documentations
+
+- [[docs/paper/paper.pdf][the paper]]
+- [[docs/report/report.pdf][the interim report]]
+- [[docs/pitch/pitch.pdf][the pitch]]
+- [[docs/log.org][experiment log]]
+- [[docs/results_iac][post-related results]]
 
 ** quick start
 
@@ -12,11 +20,15 @@ argument similarity learning with variational autoencoder
 
 *** datasets
 
-todo
-
 #+BEGIN_SRC bash :eval no
 mkdir data
 #+END_SRC
+
+download and unzip the following datasets into =data=
+
+- [[http://www.hlt.utdallas.edu/~saidul/stance/reason.html][reason identification and classification]] for evaluation
+- [[http://www.research.ibm.com/haifa/dept/vst/debating_data.shtml#Project][claim sentences search]] for sentence modeling (use dirname =ibm_claim=)
+- [[https://nlds.soe.ucsc.edu/iac][internet argument corpus v1.1]] for post modeling (use dirname =iac_v1.1=)
 
 *** to reproduce our results
 
@@ -28,18 +40,34 @@ cd src
 - prepare the data
 
 #+BEGIN_SRC bash :eval no
-./data.py
+./data_iac.py
+#+END_SRC
+
+or
+
+#+BEGIN_SRC bash :eval no
+./data_iac.py
 #+END_SRC
 
 - train a new model
 
 #+BEGIN_SRC bash :eval no
-./traing.py
+./train.py
 #+END_SRC
 
-- clustering and evaluation
+check =./train.py --help= for arguments
+and see =config.json= for more configurations.
 
-todo
+- evaluation and exploration
+
+this part is messy, due to the experimental nature of this project.
+all relevant scripts are named =eval_*.py=
+
+basically first run =eval_prep_data_*.py= to prepare the evaluation data.
+then run =eval_embed*.py= to embed the prepared data using the trained model.
+finally run =eval_classification*.py= for classification
+and =eval_clustering*.py= for clustering.
+there are also a few scripts named =explore*.py= for explorations.
 
 *** default paths, git ignored
 
@@ -47,21 +75,3 @@ todo
 - =trial/data= for storing processed data
 - =trial/ckpt= for model checkpoints
 - =trial/log= for tensorboard summaries
-
-** content
-
-- [[docs][docs]]: documentation, logs, slides, paper
-- [[src][src]]: code
-  + [[src/data.py][data.py]]: for preprocessing
-  + [[src/train.py][train.py]]: for training
-  + [[src/model.py][model.py]]: the model
-  + =util*.py=: various utilities
-
-** trivialities
-
-*** sentencepiece
-
-| =vocab_size= | 8192 |
-| =unk_id=     |    0 |
-| =eos_id=     |    1 |
-| =bos_id=     |    2 |

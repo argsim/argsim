@@ -1,6 +1,6 @@
 {
     "paths": {
-        "log": "~/cache/tensorboard-logdir/argsim"
+        "log": "../trial/log"
         , "vocab": "../trial/data/vocab.model"
         , "train": "../trial/data/train.txt"
         , "valid": "../trial/data/valid.npy"
