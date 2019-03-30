@@ -39,15 +39,7 @@ cd src
 
 - prepare the data
 
-#+BEGIN_SRC bash :eval no
-./data_iac.py
-#+END_SRC
-
-or
-
-#+BEGIN_SRC bash :eval no
-./data_iac.py
-#+END_SRC
+run =./data_ibm.py= or =./data_iac.py=
 
 - train a new model
 
@@ -61,7 +53,6 @@ and see =config.json= for more configurations.
 - evaluation and exploration
 
 this part is messy, due to the experimental nature of this project.
-all relevant scripts are named =eval_*.py=
 
 basically first run =eval_prep_data_*.py= to prepare the evaluation data.
 then run =eval_embed*.py= to embed the prepared data using the trained model.
