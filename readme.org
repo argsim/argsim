@@ -62,7 +62,7 @@ there are also a few scripts named =explore*.py= for explorations.
 
 *** default paths, git ignored
 
-- =data=: for storing raw data
+- =data= for storing raw data
 - =trial/data= for storing processed data
 - =trial/ckpt= for model checkpoints
 - =trial/log= for tensorboard summaries
